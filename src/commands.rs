@@ -38,9 +38,18 @@ pub fn start_ipfs() {
     do_daemon_command("/bin/bash", ["./scripts/daemon_ipfs.sh"]);
 }
 
+#[test]
+fn test_start_ipfs() {
+    start_ipfs()
+}
+
 pub fn stop_ipfs() {
     let output = do_command("/bin/bash", ["./scripts/stop_ipfs.sh"]).expect("stop ipfs failed");
     println!("stop ipfs output: {}", output);
+}
+#[test]
+fn test_stop_ipfs() {
+    stop_ipfs()
 }
 
 fn do_command<I, S>(command: &str, args: I) -> Option<String>
