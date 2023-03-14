@@ -1,0 +1,1 @@
+bash stop_ipfs.sh && bash daemon_ipfs.sh
