@@ -6,7 +6,7 @@ fn main() {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     match rt.block_on(do_post()) {
-        Ok(msg) => println!("Done {}", msg),
-        Err(e) => error!("An error ocurred: {}", e),
+        Ok(msg) => info!("Done {}", msg),
+        Err(e) => error!("An error occurred: {}", e),
     };
 }
