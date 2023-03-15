@@ -1,0 +1,23 @@
+appenders:
+  stdout:
+    kind: console
+    encoder:
+      pattern: "[Console] {d} - {l} - {t} - {m}{n}"
+
+  file:
+    kind: file
+    path: "log/test.log"
+    encoder:
+      pattern: "[File] {d} - {l} - {t} - {m}{n}"
+
+root:
+  level: info
+  appenders:
+    - stdout
+
+loggers:
+  pinset_sync_rust:
+    level: info
+    appenders:
+      - file
+    additive: false
