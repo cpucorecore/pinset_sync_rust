@@ -11,7 +11,7 @@ appenders:
       pattern: "[File] {d} - {l} - {t} - {m}{n}"
 
 root:
-  level: info
+  level: debug
   appenders:
     - stdout
 
