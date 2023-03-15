@@ -2,13 +2,13 @@ appenders:
   stdout:
     kind: console
     encoder:
-      pattern: "[Console] {d} - {l} - {t} - {m}{n}"
+      pattern: "[Console] {d} - {l} - {t} - {m}"
 
   file:
     kind: file
     path: "log/test.log"
     encoder:
-      pattern: "[File] {d} - {l} - {t} - {m}{n}"
+      pattern: "[File] {d} - {l} - {t} - {m}"
 
 root:
   level: info
