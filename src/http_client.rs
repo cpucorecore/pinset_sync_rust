@@ -1,5 +1,3 @@
-use log::{error, info};
-
 pub async fn do_post() -> Result<String, reqwest::Error> {
     let client = reqwest::Client::new();
     Ok(client
@@ -13,7 +11,7 @@ pub async fn do_post() -> Result<String, reqwest::Error> {
 #[tokio::test]
 async fn test_do_post() {
     match do_post().await {
-        Ok(msg) => info!("do post response:{}", msg),
-        Err(err) => error!("do post err:{}", err),
+        Ok(msg) => println!("do post response:{}", msg),
+        Err(err) => println!("do post err:{}", err),
     };
 }

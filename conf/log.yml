@@ -15,15 +15,15 @@ root:
   appenders:
     - stdout
 
-loggers:
-  pinset_sync_rust:
-    level: info
-    appenders:
-      - file
-    additive: false
-
-  settings:
-    level: info
-    appenders:
-      - file
-    additive: false
+#loggers:
+#  pinset_sync_rust:
+#    level: info
+#    appenders:
+#      - file
+#    additive: false
+#
+#  settings:
+#    level: info
+#    appenders:
+#      - file
+#    additive: false

@@ -15,6 +15,6 @@ pub fn get<'a, T: serde::Deserialize<'a>>(key: &str) -> T {
 
 #[test]
 fn test_get() {
-    let host: Vec<String> = get("network.host");
+    let host: String = get("network.host");
     println!("host:{:?}", host);
 }

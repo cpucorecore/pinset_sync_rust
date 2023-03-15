@@ -17,3 +17,4 @@ tokio = { version = "1.26.0", features = ["full"] }
 futures = { version = "0.3.21"}
 config = "0.13.1"
 lazy_static = "1.4.0"
+kv = "0.24.0"
