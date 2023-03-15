@@ -1,6 +1,5 @@
 use config::Config;
 use lazy_static::lazy_static;
-use log::info;
 
 lazy_static! {
     pub static ref CONFIG: Config = Config::builder()
@@ -12,4 +11,10 @@ lazy_static! {
 
 pub fn get<'a, T: serde::Deserialize<'a>>(key: &str) -> T {
     CONFIG.get::<T>(key).unwrap()
+}
+
+#[test]
+fn test_get() {
+    let host: Vec<String> = get("network.host");
+    println!("host:{:?}", host);
 }
