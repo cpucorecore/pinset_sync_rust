@@ -2,13 +2,13 @@ appenders:
   stdout:
     kind: console
     encoder:
-      pattern: "[Console] {d} - {l} - {t} - {m}"
+      pattern: "[Console] {d} - {l} - {t} - {m}{n}"
 
   file:
     kind: file
     path: "log/test.log"
     encoder:
-      pattern: "[File] {d} - {l} - {t} - {m}"
+      pattern: "[File] {d} - {l} - {t} - {m}{n}"
 
 root:
   level: info
@@ -17,6 +17,12 @@ root:
 
 loggers:
   pinset_sync_rust:
+    level: info
+    appenders:
+      - file
+    additive: false
+
+  settings:
     level: info
     appenders:
       - file

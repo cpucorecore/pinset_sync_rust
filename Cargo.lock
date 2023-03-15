@@ -995,6 +995,7 @@ dependencies = [
  "config",
  "fork",
  "futures",
+ "lazy_static",
  "log",
  "log4rs",
  "reqwest",
