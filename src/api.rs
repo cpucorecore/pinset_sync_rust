@@ -1,7 +1,7 @@
 use crate::http_client::{file_stat, ipfs_pin_ls, ipfs_repo_stat};
 use crate::types::{FileStat, PinSet, SpaceInfo};
 use actix_web::{get, web, Responder};
-use log::error;
+use log::{debug, error};
 
 #[get("/ipfs_repo_stat")]
 pub async fn index() -> impl Responder {
@@ -25,6 +25,7 @@ pub async fn space_info() -> impl Responder {
 
     // TODO: extract a private function below
     if let Ok(pin_ls_resp) = ipfs_pin_ls().await {
+        println!("xxx: {}", pin_ls_resp);
         let pinset: PinSet = serde_json::from_str(&pin_ls_resp).expect("");
         for (pin, _) in pinset.keys {
             //TODO: if need call api, use multi thread
