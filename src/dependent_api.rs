@@ -5,7 +5,7 @@ use reqwest::Client;
 lazy_static! {
     static ref HTTP_CLIENT: Client = Client::new();
     static ref URL_IPFS_REPO_STAT: String = format!(
-        "http:://{}:{}/api/v0/repo/stat?size-only=false&human=false",
+        "http://{}:{}/api/v0/repo/stat?size-only=false&human=false",
         SETTINGS.dependent_api.host, SETTINGS.dependent_api.ipfs_port
     );
     static ref URL_IPFS_PIN_LS: String = format!(
