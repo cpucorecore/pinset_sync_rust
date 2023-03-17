@@ -1,6 +1,6 @@
 use crate::dependent_api::{ipfs_file_stat, ipfs_pin_ls, ipfs_repo_stat};
 use crate::settings::SETTINGS;
-use crate::types::{FileStat, PinSet, SpaceInfo};
+use crate::types::{FileStat, IpfsRepoStat, PinSet, SpaceInfo};
 use actix_web::rt::spawn;
 use actix_web::{get, web, Responder};
 use log::{debug, error};
@@ -19,14 +19,14 @@ pub async fn hello(name: web::Path<String>) -> impl Responder {
 }
 
 async fn get_ipfs_file_stat(cids: Vec<String>) -> Result<i64, ()> {
-    let mut space_pinned1 = 0_i64;
+    let mut space_pinned = 0_i64;
 
     for cid in cids {
         match ipfs_file_stat(&cid).await {
             Ok(resp) => {
                 let fs: FileStat = serde_json::from_str(&resp).expect("");
-                println!("{:?}", fs);
-                space_pinned1 += fs.cumulative_size;
+                debug!("{:?}", fs);
+                space_pinned += fs.cumulative_size;
             }
             Err(err) => {
                 error!("err: {}", err);
@@ -34,21 +34,37 @@ async fn get_ipfs_file_stat(cids: Vec<String>) -> Result<i64, ()> {
         }
     }
 
-    Ok(space_pinned1)
+    Ok(space_pinned)
 }
 
 async fn get_pin_set() -> Result<Vec<String>, ()> {
     match ipfs_pin_ls().await {
-        Ok(pin_ls_resp) => {
-            debug!("pin ls response: {}", pin_ls_resp);
+        Ok(resp) => {
+            debug!("pin ls response: {}", resp);
 
             let pinset: PinSet =
-                serde_json::from_str(&pin_ls_resp).expect("json parse pin ls response failed");
+                serde_json::from_str(&resp).expect("json parse pin ls response failed"); // TODO: err handle
             let cids: Vec<String> = pinset.keys.into_keys().collect();
             Ok(cids)
         }
         Err(err) => {
             error!("ipfs pin ls err: {}", err);
+            Err(())
+        }
+    }
+}
+
+async fn get_ipfs_repo_stat() -> Result<IpfsRepoStat, ()> {
+    match ipfs_repo_stat().await {
+        Ok(resp) => {
+            debug!("ipfs repo stat: {}", resp);
+
+            let stat: IpfsRepoStat =
+                serde_json::from_str(&resp).expect("json parse repo stat response failed"); // TODO: err handle
+            Ok(stat)
+        }
+        Err(err) => {
+            error!("ipfs repo stat err: {}", err);
             Err(())
         }
     }
@@ -72,8 +88,6 @@ fn split_worklists(mut cids: Vec<String>) -> Vec<Vec<String>> {
 #[get("/space_info")]
 pub async fn space_info() -> impl Responder {
     let mut space_pinned = 0_i64;
-    let space_used = 0;
-    let space_ipfs_total = 0;
     let space_disk_free = 0;
 
     let cids = get_pin_set().await.unwrap();
@@ -88,10 +102,12 @@ pub async fn space_info() -> impl Responder {
         space_pinned += handle.await.unwrap().unwrap()
     }
 
+    let stat = get_ipfs_repo_stat().await.unwrap();
+
     serde_json::to_string(&SpaceInfo {
         space_pinned,
-        space_used,
-        space_ipfs_total,
+        space_used: stat.repo_size,
+        space_ipfs_total: stat.storage_max,
         space_disk_free,
     })
     .unwrap()

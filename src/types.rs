@@ -43,3 +43,22 @@ pub struct FileStat {
     #[serde(rename = "CumulativeSize")]
     pub cumulative_size: i64,
 }
+
+/*
+curl -X POST "http://192.168.0.85:5001/api/v0/repo/stat"
+{
+  "RepoSize": 314830983748,
+  "StorageMax": 644245094400,
+  "NumObjects": 360293,
+  "RepoPath": "/ac/store/.ipfs",
+  "Version": "fs-repo@12"
+}
+ */
+
+#[derive(Debug, Deserialize)]
+pub struct IpfsRepoStat {
+    #[serde(rename = "RepoSize")]
+    pub repo_size: i64,
+    #[serde(rename = "StorageMax")]
+    pub storage_max: i64,
+}
