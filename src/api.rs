@@ -1,7 +1,9 @@
-use crate::http_client::{file_stat, ipfs_pin_ls, ipfs_repo_stat};
+use crate::dependent_api::{ipfs_file_stat, ipfs_pin_ls, ipfs_repo_stat};
+use crate::settings::SETTINGS;
 use crate::types::{FileStat, PinSet, SpaceInfo};
+use actix_web::rt::spawn;
 use actix_web::{get, web, Responder};
-use log::error;
+use log::{debug, error};
 
 #[get("/ipfs_repo_stat")]
 pub async fn index() -> impl Responder {
@@ -16,6 +18,57 @@ pub async fn hello(name: web::Path<String>) -> impl Responder {
     format!("hello {}!", &name)
 }
 
+async fn get_ipfs_file_stat(cids: Vec<String>) -> Result<i64, ()> {
+    let mut space_pinned1 = 0_i64;
+
+    for cid in cids {
+        match ipfs_file_stat(&cid).await {
+            Ok(resp) => {
+                let fs: FileStat = serde_json::from_str(&resp).expect("");
+                println!("{:?}", fs);
+                space_pinned1 += fs.cumulative_size;
+            }
+            Err(err) => {
+                error!("err: {}", err);
+            }
+        }
+    }
+
+    Ok(space_pinned1)
+}
+
+async fn get_pin_set() -> Result<Vec<String>, ()> {
+    match ipfs_pin_ls().await {
+        Ok(pin_ls_resp) => {
+            debug!("pin ls response: {}", pin_ls_resp);
+
+            let pinset: PinSet =
+                serde_json::from_str(&pin_ls_resp).expect("json parse pin ls response failed");
+            let cids: Vec<String> = pinset.keys.into_keys().collect();
+            Ok(cids)
+        }
+        Err(err) => {
+            error!("ipfs pin ls err: {}", err);
+            Err(())
+        }
+    }
+}
+
+fn split_worklists(mut cids: Vec<String>) -> Vec<Vec<String>> {
+    let mut worklists = vec![];
+
+    let batch_size = cids.len() / SETTINGS.dependent_api.worker;
+    let _ = (0..SETTINGS.dependent_api.worker - 1).map(|_| {
+        let batch: Vec<String> = cids.drain(0..batch_size).collect();
+        worklists.push(batch);
+    });
+
+    let last_batch: Vec<String> = cids.drain(0..cids.len()).collect();
+    worklists.push(last_batch);
+
+    worklists
+}
+
 #[get("/space_info")]
 pub async fn space_info() -> impl Responder {
     let mut space_pinned = 0_i64;
@@ -23,26 +76,16 @@ pub async fn space_info() -> impl Responder {
     let space_ipfs_total = 0;
     let space_disk_free = 0;
 
-    // TODO: extract a private function below
-    if let Ok(pin_ls_resp) = ipfs_pin_ls().await {
-        println!("xxx: {}", pin_ls_resp);
-        let pinset: PinSet = serde_json::from_str(&pin_ls_resp).expect("");
-        for (pin, _) in pinset.keys {
-            //TODO: if need call api, use multi thread
-            // TODO: query db first for reduce api(file_stat) calls
-            println!("{:?}", pin);
-            match file_stat(&pin).await {
-                Ok(file_stat_resp) => {
-                    let fs: FileStat = serde_json::from_str(&file_stat_resp).expect("");
-                    println!("{:?}", fs);
-                    space_pinned += fs.cumulative_size;
-                    //TODO: save to db for deduplicated request
-                }
-                Err(err) => {
-                    error!("err: {}", err);
-                }
-            }
-        }
+    let cids = get_pin_set().await.unwrap();
+
+    let mut thread_handles = vec![];
+    let worklists = split_worklists(cids);
+    for worklist in worklists {
+        thread_handles.push(spawn(get_ipfs_file_stat(worklist)));
+    }
+
+    for handle in thread_handles {
+        space_pinned += handle.await.unwrap().unwrap()
     }
 
     serde_json::to_string(&SpaceInfo {
