@@ -1,7 +1,7 @@
 use crate::http_client::{file_stat, ipfs_pin_ls, ipfs_repo_stat};
 use crate::types::{FileStat, PinSet, SpaceInfo};
 use actix_web::{get, web, Responder};
-use log::{debug, error};
+use log::error;
 
 #[get("/ipfs_repo_stat")]
 pub async fn index() -> impl Responder {
