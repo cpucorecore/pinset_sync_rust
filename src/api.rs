@@ -1,8 +1,10 @@
 use crate::commands::get_disk_free_space;
 use crate::db;
-use crate::dependent_api::{ipfs_file_stat, ipfs_pin_ls, ipfs_repo_stat};
+use crate::dependent_api::{
+    cluster_id, cluster_pin_ls, ipfs_file_stat, ipfs_id, ipfs_pin_ls, ipfs_repo_stat,
+};
 use crate::settings::SETTINGS;
-use crate::types::{FileStat, IpfsRepoStat, PinSet, SpaceInfo};
+use crate::types::{FileStat, IpfsRepoStat, SpaceInfo};
 use actix_web::rt::spawn;
 use actix_web::{get, web, Responder};
 use log::{debug, error};
@@ -78,21 +80,8 @@ async fn get_ipfs_file_stat2(cids: Vec<String>) -> Result<i64, ()> {
     Ok(space_pinned)
 }
 
-async fn get_pin_set() -> Result<Vec<String>, ()> {
-    match ipfs_pin_ls().await {
-        Ok(resp) => {
-            debug!("pin ls response: {}", resp);
-
-            let pinset: PinSet =
-                serde_json::from_str(&resp).expect("json parse pin ls response failed"); // TODO: err handle
-            let cids: Vec<String> = pinset.keys.into_keys().collect();
-            Ok(cids)
-        }
-        Err(err) => {
-            error!("ipfs pin ls err: {}", err);
-            Err(())
-        }
-    }
+async fn get_pin_set() -> Option<Vec<String>> {
+    ipfs_pin_ls().await
 }
 
 async fn get_ipfs_repo_stat() -> Result<IpfsRepoStat, ()> {
@@ -151,4 +140,35 @@ pub async fn space_info() -> impl Responder {
         space_disk_free: get_disk_free_space(),
     })
     .unwrap()
+}
+
+#[get("/sync_review")]
+pub async fn sync_review() -> impl Responder {
+    let id;
+    match cluster_id().await {
+        Some(x) => id = x,
+        None => return "get ipfs id failed",
+    }
+
+    let mut pins_to_add = vec![];
+    // let mut pins_to_rm = vec![];
+    if let Some(cluster_pinset) = cluster_pin_ls().await {
+        if let Some(ipfs_pinset) = ipfs_pin_ls().await {
+            dbg!(&cluster_pinset);
+            dbg!(&ipfs_pinset);
+            for cluster_pin in &cluster_pinset {
+                if cluster_pin.allocations.contains(&id) && !ipfs_pinset.contains(&cluster_pin.cid)
+                {
+                    pins_to_add.push(cluster_pin.cid.clone())
+                }
+            }
+            let x = serde_json::to_string(&pins_to_add).unwrap();
+            dbg!(x);
+            "ok"
+        } else {
+            "ipfs pin ls failed"
+        }
+    } else {
+        "cluster pin ls failed"
+    }
 }
