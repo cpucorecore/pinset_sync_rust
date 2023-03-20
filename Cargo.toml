@@ -10,7 +10,7 @@ log = "0.4.17"
 log4rs = "1.2.0"
 config = "0.13.1"
 lazy_static = "1.4.0"
-kv = "0.24.0"
+kv = {version = "0.24.0", features=["json-value"]}
 fork = "0.1.20"
 serde = "1.0.155"
 serde_derive = "1.0.155"

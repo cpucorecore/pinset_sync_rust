@@ -1051,6 +1051,7 @@ checksum = "620727085ac39ee9650b373fe6d8073a0aee6f99e52a9c72b25f7671078039ab"
 dependencies = [
  "pin-project-lite",
  "serde",
+ "serde_json",
  "sled",
  "thiserror",
  "toml",

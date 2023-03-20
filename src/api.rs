@@ -48,6 +48,35 @@ async fn get_ipfs_file_stat(cids: Vec<String>) -> Result<i64, ()> {
     Ok(space_pinned)
 }
 
+#[allow(unused)]
+async fn get_ipfs_file_stat2(cids: Vec<String>) -> Result<i64, ()> {
+    let mut space_pinned = 0_i64;
+
+    for cid in cids {
+        match db::pinset_get2(cid.as_str()) {
+            None => match ipfs_file_stat(&cid).await {
+                Ok(api_resp) => match serde_json::from_str::<FileStat>(&api_resp) {
+                    Ok(fs) => {
+                        space_pinned += fs.cumulative_size;
+                        db::pinset_set2(cid.as_str(), fs);
+                    }
+                    Err(err) => {
+                        error!("parse FileStat err: {}", err);
+                    }
+                },
+                Err(err) => {
+                    error!("call api file stat err: {}", err);
+                }
+            },
+            Some(fs) => {
+                space_pinned += fs.cumulative_size;
+            }
+        };
+    }
+
+    Ok(space_pinned)
+}
+
 async fn get_pin_set() -> Result<Vec<String>, ()> {
     match ipfs_pin_ls().await {
         Ok(resp) => {

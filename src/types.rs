@@ -44,6 +44,22 @@ pub struct FileStat {
     pub cumulative_size: i64,
 }
 
+// impl kv::Value for FileStat {
+//     fn to_raw_value(&self) -> Result<Raw, Error> {
+//         match serde_json::to_string(self) {
+//             Ok(v) => Ok(Raw::from(v.as_str())),
+//             Err(err) => Err(Error::Message(err.to_string())),
+//         }
+//     }
+//
+//     fn from_raw_value(r: Raw) -> Result<Self, Error> {
+//         match serde_json::from_value(r) {
+//             Ok(v) => Ok(v),
+//             Err(err) => Err(Error::Message(err.to_string())),
+//         }
+//     }
+// }
+
 /*
 curl -X POST "http://192.168.0.85:5001/api/v0/repo/stat"
 {
