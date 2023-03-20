@@ -1,3 +1,4 @@
+use crate::db;
 use crate::dependent_api::{ipfs_file_stat, ipfs_pin_ls, ipfs_repo_stat};
 use crate::settings::SETTINGS;
 use crate::types::{FileStat, IpfsRepoStat, PinSet, SpaceInfo};
@@ -22,16 +23,26 @@ async fn get_ipfs_file_stat(cids: Vec<String>) -> Result<i64, ()> {
     let mut space_pinned = 0_i64;
 
     for cid in cids {
-        match ipfs_file_stat(&cid).await {
-            Ok(resp) => {
-                let fs: FileStat = serde_json::from_str(&resp).expect("");
-                debug!("{:?}", fs);
+        match db::pinset_get(cid.as_str()) {
+            None => match ipfs_file_stat(&cid).await {
+                Ok(api_resp) => match serde_json::from_str::<FileStat>(&api_resp) {
+                    Ok(fs) => {
+                        space_pinned += fs.cumulative_size;
+                        db::pinset_set(cid.as_str(), &api_resp);
+                    }
+                    Err(err) => {
+                        error!("parse FileStat err: {}", err);
+                    }
+                },
+                Err(err) => {
+                    error!("call api file stat err: {}", err);
+                }
+            },
+            Some(db_resp) => {
+                let fs = serde_json::from_str::<FileStat>(&db_resp).unwrap();
                 space_pinned += fs.cumulative_size;
             }
-            Err(err) => {
-                error!("err: {}", err);
-            }
-        }
+        };
     }
 
     Ok(space_pinned)

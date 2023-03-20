@@ -6,24 +6,31 @@ appenders:
 
   file:
     kind: file
-    path: "log/test.log"
+    path: "logs/log.log"
     encoder:
       pattern: "[File] {d} - {l} - {t} - {m}{n}"
 
 root:
   level: info
   appenders:
+    - file
     - stdout
 
-#loggers:
-#  pinset_sync_rust:
-#    level: info
-#    appenders:
-#      - file
-#    additive: false
-#
-#  settings:
-#    level: info
-#    appenders:
-#      - file
-#    additive: false
+loggers:
+  pinset_sync_rust:
+    level: debug
+    appenders:
+      - file
+    additive: false
+
+  settings:
+    level: info
+    appenders:
+      - file
+    additive: false
+
+  db:
+    level: debug
+    appenders:
+      - file
+    additive: false
