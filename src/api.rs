@@ -1,3 +1,4 @@
+use crate::commands::get_disk_free_space;
 use crate::db;
 use crate::dependent_api::{ipfs_file_stat, ipfs_pin_ls, ipfs_repo_stat};
 use crate::settings::SETTINGS;
@@ -128,7 +129,6 @@ fn split_worklists(mut cids: Vec<String>) -> Vec<Vec<String>> {
 #[get("/space_info")]
 pub async fn space_info() -> impl Responder {
     let mut space_pinned = 0_i64;
-    let space_disk_free = 0;
 
     let cids = get_pin_set().await.unwrap();
 
@@ -148,7 +148,7 @@ pub async fn space_info() -> impl Responder {
         space_pinned,
         space_used: stat.repo_size,
         space_ipfs_total: stat.storage_max,
-        space_disk_free,
+        space_disk_free: get_disk_free_space(),
     })
     .unwrap()
 }

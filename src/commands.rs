@@ -1,8 +1,26 @@
 use fork::{fork, Fork};
+use log::{debug, error};
 use std::ffi::OsStr;
 use std::process::Command;
+use std::str::FromStr;
 
 use crate::types::ClusterPin;
+
+pub fn get_disk_free_space() -> i64 {
+    match do_command("/bin/bash", ["./scripts/get_disk_free_space.sh"]) {
+        Some(vs) => {
+            debug!("vs={}", vs);
+            match i64::from_str(vs.trim()) {
+                Ok(v) => v,
+                Err(err) => {
+                    error!("parse i64 err: {}", err);
+                    -1
+                }
+            }
+        }
+        None => -1,
+    }
+}
 
 pub fn export_cluster_state() {
     let output =
