@@ -120,7 +120,7 @@ pub struct ClusterId {
 }
 
 #[derive(Debug, Serialize)]
-pub struct SyncReview<'a> {
-    pub pins_to_add: Vec<&'a String>,
-    pub pins_to_rm: Vec<&'a String>,
+pub struct SyncReview {
+    pub pins_to_add: Vec<String>,
+    pub pins_to_rm: Vec<String>,
 }

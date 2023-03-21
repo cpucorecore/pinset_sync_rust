@@ -1,13 +1,14 @@
 use crate::commands::get_disk_free_space;
 use crate::db;
 use crate::dependent_api::{
-    cluster_id, cluster_pin_ls, ipfs_file_stat, ipfs_pin_ls, ipfs_repo_stat,
+    cluster_id, cluster_pin_ls, ipfs_file_stat, ipfs_pin_add, ipfs_pin_ls, ipfs_pin_rm,
+    ipfs_repo_stat,
 };
 use crate::settings::SETTINGS;
 use crate::types::{FileStat, IpfsRepoStat, SpaceInfo, SyncReview};
 use actix_web::rt::spawn;
 use actix_web::{get, web, Responder};
-use log::{debug, error};
+use log::{debug, error, info};
 
 #[get("/ipfs_repo_stat")]
 pub async fn index() -> impl Responder {
@@ -144,13 +145,66 @@ pub async fn space_info() -> impl Responder {
 
 #[get("/sync_review")]
 pub async fn sync_review() -> impl Responder {
+    match get_sync_review().await {
+        Some(review) => {
+            let review_result: String = serde_json::to_string(&review).unwrap();
+            review_result.leak() // TODO: how to return &str without using leak()?
+        }
+        None => "get_sync_review failed",
+    }
+}
+
+#[get("/sync")]
+pub async fn sync() -> impl Responder {
+    match get_sync_review().await {
+        Some(review) => {
+            do_sync(&review).await;
+            "ok"
+        }
+        None => "get_sync_review failed",
+    }
+}
+
+async fn do_sync(review: &SyncReview) {
+    // TODO: multiple thread do it
+    for cid in &review.pins_to_add {
+        match ipfs_pin_add(cid).await {
+            Ok(resp) => {
+                debug!("ipfs pin add resp:{}", resp);
+            }
+            Err(err) => {
+                error!("ipfs pin add err: {}", err);
+            }
+        }
+    }
+
+    for cid in &review.pins_to_rm {
+        match ipfs_pin_rm(cid).await {
+            Ok(resp) => {
+                debug!("ipfs pin rm resp:{}", resp);
+            }
+            Err(err) => {
+                error!("ipfs pin rm err: {}", err);
+            }
+        }
+    }
+}
+
+async fn get_sync_review() -> Option<SyncReview> {
     let id;
     match cluster_id().await {
         Some(r) => id = r,
-        None => return "get cluster id failed",
+        None => {
+            return {
+                error!("get cluster id failed");
+                None
+            }
+        }
     }
 
     let mut pinset_should_pin = vec![];
+
+    // TODO: check pins_to_add across pins_to_rm
     let mut review = SyncReview {
         pins_to_add: vec![],
         pins_to_rm: vec![],
@@ -158,30 +212,31 @@ pub async fn sync_review() -> impl Responder {
 
     if let Some(cluster_pinset) = cluster_pin_ls().await {
         if let Some(ipfs_pinset) = ipfs_pin_ls().await {
-            for cluster_pin in &cluster_pinset {
+            for cluster_pin in cluster_pinset {
                 if cluster_pin.allocations.contains(&id) {
-                    pinset_should_pin.push(&cluster_pin.cid)
+                    pinset_should_pin.push(cluster_pin.cid)
                 }
             }
 
             for cid in &pinset_should_pin {
                 if !ipfs_pinset.contains(cid) {
-                    review.pins_to_add.push(cid)
+                    review.pins_to_add.push(cid.clone())
                 }
             }
 
             for cid in &ipfs_pinset {
                 if !pinset_should_pin.contains(&cid) {
-                    review.pins_to_rm.push(cid)
+                    review.pins_to_rm.push(cid.clone())
                 }
             }
 
-            let review_result: String = serde_json::to_string(&review).unwrap();
-            review_result.leak() // TODO: how to return &str without using leak()?
+            Some(review)
         } else {
-            "ipfs pin ls failed"
+            error!("ipfs pin ls failed");
+            None
         }
     } else {
-        "cluster pin ls failed"
+        error!("cluster pin ls failed");
+        None
     }
 }

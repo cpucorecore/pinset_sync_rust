@@ -64,6 +64,24 @@ pub async fn ipfs_file_stat(cid: &String) -> Result<String, reqwest::Error> {
     do_post(&url).await
 }
 
+pub async fn ipfs_pin_add(cid: &String) -> Result<String, reqwest::Error> {
+    // curl -X POST "http://127.0.0.1:5001/api/v0/pin/add?arg=/ipfs/QmWgQg88bqTGtFK9Mq7Sq54HKMMFda5htMbkcNdptKMKK3&recursive=true&progress=false"
+    let url = format!(
+        "http://{}:{}/api/v0/pin/add?arg=/ipfs/{}",
+        SETTINGS.dependent_api.host, SETTINGS.dependent_api.ipfs_port, cid
+    );
+    do_post(&url).await
+}
+
+pub async fn ipfs_pin_rm(cid: &String) -> Result<String, reqwest::Error> {
+    // curl -X POST "http://127.0.0.1:5001/api/v0/pin/rm?arg=/ipfs/QmWgQg88bqTGtFK9Mq7Sq54HKMMFda5htMbkcNdptKMKK3"
+    let url = format!(
+        "http://{}:{}/api/v0/pin/rm?arg=/ipfs/{}",
+        SETTINGS.dependent_api.host, SETTINGS.dependent_api.ipfs_port, cid
+    );
+    do_post(&url).await
+}
+
 pub async fn cluster_pin_ls() -> Option<Vec<ClusterPin>> {
     match do_get(&URL_CLUSTER_PIN_LS).await {
         Ok(resp) => match parse_cluster_state_export_output(&resp) {
