@@ -1,6 +1,3 @@
-#![feature(string_leak)]
-extern crate core;
-
 pub mod api;
 pub mod automate_service;
 pub mod commands;

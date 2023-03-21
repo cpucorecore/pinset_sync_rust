@@ -8,7 +8,7 @@ use crate::settings::SETTINGS;
 use crate::types::{FileStat, IpfsRepoStat, SpaceInfo, SyncReview};
 use actix_web::rt::spawn;
 use actix_web::{get, web, Responder};
-use log::{debug, error, info};
+use log::{debug, error};
 
 #[get("/ipfs_repo_stat")]
 pub async fn index() -> impl Responder {
@@ -143,14 +143,21 @@ pub async fn space_info() -> impl Responder {
     .unwrap()
 }
 
+#[get("/gc_review")]
+pub async fn gc_review() -> impl Responder {
+    ""
+}
+
+#[get("/gc")]
+pub async fn gc() -> impl Responder {
+    ""
+}
+
 #[get("/sync_review")]
 pub async fn sync_review() -> impl Responder {
     match get_sync_review().await {
-        Some(review) => {
-            let review_result: String = serde_json::to_string(&review).unwrap();
-            review_result.leak() // TODO: how to return &str without using leak()?
-        }
-        None => "get_sync_review failed",
+        Some(review) => serde_json::to_string(&review).unwrap(),
+        None => "get_sync_review failed".to_string(),
     }
 }
 
