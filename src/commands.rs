@@ -30,7 +30,7 @@ pub fn export_cluster_state() -> Option<Vec<ClusterPin>> {
     parse_cluster_state_export_output(&output)
 }
 
-pub fn ipfs_pin_ls() -> Option<Vec<String>> {
+pub fn cmd_ipfs_pin_ls() -> Option<Vec<String>> {
     let output = do_command("ipfs", ["pin", "ls", "--type", "recursive"]).expect("pin ls failed");
 
     let r: Vec<String> = output
@@ -50,7 +50,7 @@ pub fn ipfs_gc() -> Option<String> {
 
 #[test]
 fn test_ipfs_pin_ls() {
-    match ipfs_pin_ls() {
+    match cmd_ipfs_pin_ls() {
         None => {
             error!("err")
         }

@@ -1,6 +1,6 @@
 use crate::commands::{
-    export_cluster_state, get_disk_free_space, ipfs_gc, start_cluster, start_ipfs, stop_cluster,
-    stop_ipfs,
+    cmd_ipfs_pin_ls, export_cluster_state, get_disk_free_space, ipfs_gc, start_cluster, start_ipfs,
+    stop_cluster, stop_ipfs,
 };
 use crate::db;
 use crate::dependent_api::{
@@ -84,10 +84,6 @@ async fn get_ipfs_file_stat2(cids: Vec<String>) -> Result<i64, ()> {
     Ok(space_pinned)
 }
 
-async fn get_pin_set() -> Option<Vec<String>> {
-    ipfs_pin_ls().await
-}
-
 async fn get_ipfs_repo_stat() -> Result<IpfsRepoStat, ()> {
     match ipfs_repo_stat().await {
         Ok(resp) => {
@@ -127,7 +123,7 @@ pub async fn space_info() -> impl Responder {
 pub async fn get_space_info() -> Option<SpaceInfo> {
     let mut space_pinned = 0_i64;
 
-    let cids = get_pin_set().await.unwrap();
+    let cids = ipfs_pin_ls().await.unwrap();
 
     let mut thread_handles = vec![];
     let worklists = split_worklists(cids);
@@ -176,7 +172,7 @@ pub async fn gc() -> impl Responder {
             return "cluster state export failed";
         }
         Some(cluster_pinset) => {
-            match ipfs_pin_ls().await {
+            match cmd_ipfs_pin_ls() {
                 None => {
                     // TODO: restart cluster and ipfs
                     return "ipfs pin ls failed";
