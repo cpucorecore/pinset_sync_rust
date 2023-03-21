@@ -5,6 +5,7 @@ use std::process::Command;
 use std::str::FromStr;
 
 use crate::types::ClusterPin;
+use crate::utils::parse_cluster_state_export_output;
 
 pub fn get_disk_free_space() -> i64 {
     match do_command("/bin/bash", ["./scripts/get_disk_free_space.sh"]) {
@@ -22,52 +23,57 @@ pub fn get_disk_free_space() -> i64 {
     }
 }
 
-pub fn export_cluster_state() {
+pub fn export_cluster_state() -> Option<Vec<ClusterPin>> {
     let output =
         do_command("ipfs-cluster-service", ["state", "export"]).expect("export state failed");
 
-    let state_lines: Vec<&str> = output.split_whitespace().collect();
-    for pin in state_lines {
-        let cluster_pin: ClusterPin = serde_json::from_str(pin).expect("parse json failed");
-        println!("pin: {}:{}", cluster_pin.cid, cluster_pin.allocations[0]);
-    }
+    parse_cluster_state_export_output(&output)
 }
 
-pub fn ipfs_pin_ls() {
+pub fn ipfs_pin_ls() -> Option<Vec<String>> {
     let output = do_command("ipfs", ["pin", "ls", "--type", "recursive"]).expect("pin ls failed");
 
-    let pins: Vec<&str> = output.rsplit_terminator('\n').collect();
-    for pin in pins {
-        println!("pin: {}", pin);
+    let r: Vec<String> = output
+        .rsplit_terminator('\n')
+        .map(|line| {
+            line.split_whitespace()
+                .filter(|column| !column.eq(&"recursive"))
+                .collect()
+        })
+        .collect();
+    Some(r)
+}
+
+pub fn ipfs_gc() -> Option<String> {
+    do_command("/bin/bash", ["./scripts/gc.sh"])
+}
+
+#[test]
+fn test_ipfs_pin_ls() {
+    match ipfs_pin_ls() {
+        None => {
+            error!("err")
+        }
+        Some(v) => {
+            dbg!(v);
+        }
     }
 }
 
-pub fn start_cluster() {
-    do_daemon_command("/bin/bash", ["./scripts/daemon_cluster.sh"]);
+pub fn start_cluster() -> Option<i32> {
+    do_daemon_command("/bin/bash", ["./scripts/daemon_cluster.sh"])
 }
 
-pub fn stop_cluster() {
-    let output =
-        do_command("/bin/bash", ["./scripts/stop_cluster.sh"]).expect("stop cluster failed");
-    println!("stop cluster output: {}", output);
+pub fn stop_cluster() -> Option<String> {
+    do_command("/bin/bash", ["./scripts/stop_cluster.sh"])
 }
 
-pub fn start_ipfs() {
-    do_daemon_command("/bin/bash", ["./scripts/daemon_ipfs.sh"]);
+pub fn start_ipfs() -> Option<i32> {
+    do_daemon_command("/bin/bash", ["./scripts/daemon_ipfs.sh"])
 }
 
-#[test]
-fn test_start_ipfs() {
-    start_ipfs()
-}
-
-pub fn stop_ipfs() {
-    let output = do_command("/bin/bash", ["./scripts/stop_ipfs.sh"]).expect("stop ipfs failed");
-    println!("stop ipfs output: {}", output);
-}
-#[test]
-fn test_stop_ipfs() {
-    stop_ipfs()
+pub fn stop_ipfs() -> Option<String> {
+    do_command("/bin/bash", ["./scripts/stop_ipfs.sh"])
 }
 
 fn do_command<I, S>(command: &str, args: I) -> Option<String>
@@ -91,15 +97,32 @@ where
     }
 }
 
-fn do_daemon_command<I, S>(command: &str, args: I)
+fn do_daemon_command<I, S>(command: &str, args: I) -> Option<i32>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    if let Ok(Fork::Child) = fork() {
-        Command::new(command)
-            .args(args)
-            .output()
-            .expect("run child process failed");
+    match fork() {
+        Ok(Fork::Parent(child)) => {
+            println!(
+                "Continuing execution in parent process, new child has pid: {}",
+                child
+            );
+            Some(child)
+        }
+        Ok(Fork::Child) => {
+            println!("I'm a new child process");
+            let output = Command::new(command)
+                .args(args)
+                .output()
+                .expect("run child process failed");
+            println!("status: {}", output.status);
+            assert!(output.status.success());
+            Some(output.status.code().unwrap())
+        }
+        Err(_) => {
+            println!("Fork failed");
+            None
+        }
     }
 }

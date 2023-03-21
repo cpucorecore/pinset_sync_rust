@@ -1,4 +1,7 @@
-use crate::commands::get_disk_free_space;
+use crate::commands::{
+    export_cluster_state, get_disk_free_space, ipfs_gc, start_cluster, start_ipfs, stop_cluster,
+    stop_ipfs,
+};
 use crate::db;
 use crate::dependent_api::{
     cluster_id, cluster_pin_ls, ipfs_file_stat, ipfs_pin_add, ipfs_pin_ls, ipfs_pin_rm,
@@ -8,7 +11,7 @@ use crate::settings::SETTINGS;
 use crate::types::{FileStat, IpfsRepoStat, SpaceInfo, SyncReview};
 use actix_web::rt::spawn;
 use actix_web::{get, web, Responder};
-use log::{debug, error};
+use log::{debug, error, info};
 
 #[get("/ipfs_repo_stat")]
 pub async fn index() -> impl Responder {
@@ -118,6 +121,10 @@ fn split_worklists(mut cids: Vec<String>) -> Vec<Vec<String>> {
 
 #[get("/space_info")]
 pub async fn space_info() -> impl Responder {
+    serde_json::to_string(&get_space_info().await).unwrap()
+}
+
+pub async fn get_space_info() -> Option<SpaceInfo> {
     let mut space_pinned = 0_i64;
 
     let cids = get_pin_set().await.unwrap();
@@ -134,23 +141,103 @@ pub async fn space_info() -> impl Responder {
 
     let stat = get_ipfs_repo_stat().await.unwrap();
 
-    serde_json::to_string(&SpaceInfo {
+    Some(SpaceInfo {
         space_pinned,
         space_used: stat.repo_size,
         space_ipfs_total: stat.storage_max,
         space_disk_free: get_disk_free_space(),
     })
-    .unwrap()
 }
 
 #[get("/gc_review")]
 pub async fn gc_review() -> impl Responder {
-    ""
+    let si = get_space_info().await.unwrap();
+    serde_json::to_string(&si).unwrap()
 }
 
 #[get("/gc")]
 pub async fn gc() -> impl Responder {
-    ""
+    let id = "12D3KooWJ7b5LSbZJmRvrgGQVoSyVM6bTQdjtSc6cBpLWoZTQKXH".to_string(); // TODO: get from db
+                                                                                 // TODO: 1. global status for query; 2. session; 3. gc lock
+    if let None = stop_cluster() {
+        return "stop cluster failed";
+    }
+    info!("cluster stopped");
+
+    if let None = stop_ipfs() {
+        // TODO: restart cluster
+        return "stop ipfs failed";
+    }
+    info!("ipfs stopped");
+
+    match export_cluster_state() {
+        None => {
+            // TODO: restart cluster and ipfs
+            return "cluster state export failed";
+        }
+        Some(cluster_pinset) => {
+            match ipfs_pin_ls().await {
+                None => {
+                    // TODO: restart cluster and ipfs
+                    return "ipfs pin ls failed";
+                }
+                Some(ipfs_pinset) => {
+                    match ipfs_gc() {
+                        None => {
+                            // TODO: restart cluster and ipfs
+                            return "ipfs pin ls failed";
+                        }
+                        Some(_) => {
+                            return {
+                                match start_ipfs() {
+                                    None => {
+                                        // TODO: restart cluster and ipfs
+                                        return "ipfs pin ls failed";
+                                    }
+                                    Some(ipfs_pid) => {
+                                        info!("ipfs started, pid: {}", ipfs_pid);
+                                        let mut pinset_should_pin = vec![];
+                                        let mut review = SyncReview {
+                                            pins_to_add: vec![],
+                                            pins_to_rm: vec![],
+                                        };
+                                        for cluster_pin in cluster_pinset {
+                                            if cluster_pin.allocations.contains(&id) {
+                                                pinset_should_pin.push(cluster_pin.cid)
+                                            }
+                                        }
+
+                                        for cid in &pinset_should_pin {
+                                            if !ipfs_pinset.contains(cid) {
+                                                review.pins_to_add.push(cid.clone())
+                                            }
+                                        }
+
+                                        for cid in &ipfs_pinset {
+                                            if !pinset_should_pin.contains(&cid) {
+                                                review.pins_to_rm.push(cid.clone())
+                                            }
+                                        }
+                                        do_sync(&review).await;
+                                        match start_cluster() {
+                                            None => {
+                                                error!("start cluster failed");
+                                            }
+                                            Some(cluster_pid) => {
+                                                info!("cluster started, pid: {}", cluster_pid);
+                                                return "ok";
+                                            }
+                                        }
+                                    }
+                                }
+                                ""
+                            };
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[get("/sync_review")]
@@ -163,6 +250,7 @@ pub async fn sync_review() -> impl Responder {
 
 #[get("/sync")]
 pub async fn sync() -> impl Responder {
+    // TODO: 1. sync lock; 2. sync status;
     match get_sync_review().await {
         Some(review) => {
             do_sync(&review).await;

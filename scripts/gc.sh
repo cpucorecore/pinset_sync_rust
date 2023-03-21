@@ -1,0 +1,1 @@
+ipfs repo gc --quiet >/dev/null
