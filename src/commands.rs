@@ -1,7 +1,7 @@
 use fork::{fork, Fork};
 use log::{debug, error};
 use std::ffi::OsStr;
-use std::process::Command;
+use std::process::{exit, Command};
 use std::str::FromStr;
 
 use crate::types::ClusterPin;
@@ -108,7 +108,7 @@ where
                 "Continuing execution in parent process, new child has pid: {}",
                 child
             );
-            Some(child)
+            exit(0);
         }
         Ok(Fork::Child) => {
             println!("I'm a new child process");

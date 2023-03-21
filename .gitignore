@@ -3,3 +3,4 @@
 logs
 db
 .tmp
+pinset_sync_rust
