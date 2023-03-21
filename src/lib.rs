@@ -1,3 +1,4 @@
+#![feature(string_leak)]
 extern crate core;
 
 pub mod api;

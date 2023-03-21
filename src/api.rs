@@ -1,10 +1,10 @@
 use crate::commands::get_disk_free_space;
 use crate::db;
 use crate::dependent_api::{
-    cluster_id, cluster_pin_ls, ipfs_file_stat, ipfs_id, ipfs_pin_ls, ipfs_repo_stat,
+    cluster_id, cluster_pin_ls, ipfs_file_stat, ipfs_pin_ls, ipfs_repo_stat,
 };
 use crate::settings::SETTINGS;
-use crate::types::{FileStat, IpfsRepoStat, SpaceInfo};
+use crate::types::{FileStat, IpfsRepoStat, SpaceInfo, SyncReview};
 use actix_web::rt::spawn;
 use actix_web::{get, web, Responder};
 use log::{debug, error};
@@ -146,25 +146,38 @@ pub async fn space_info() -> impl Responder {
 pub async fn sync_review() -> impl Responder {
     let id;
     match cluster_id().await {
-        Some(x) => id = x,
-        None => return "get ipfs id failed",
+        Some(r) => id = r,
+        None => return "get cluster id failed",
     }
 
-    let mut pins_to_add = vec![];
-    // let mut pins_to_rm = vec![];
+    let mut pinset_should_pin = vec![];
+    let mut review = SyncReview {
+        pins_to_add: vec![],
+        pins_to_rm: vec![],
+    };
+
     if let Some(cluster_pinset) = cluster_pin_ls().await {
         if let Some(ipfs_pinset) = ipfs_pin_ls().await {
-            dbg!(&cluster_pinset);
-            dbg!(&ipfs_pinset);
             for cluster_pin in &cluster_pinset {
-                if cluster_pin.allocations.contains(&id) && !ipfs_pinset.contains(&cluster_pin.cid)
-                {
-                    pins_to_add.push(cluster_pin.cid.clone())
+                if cluster_pin.allocations.contains(&id) {
+                    pinset_should_pin.push(&cluster_pin.cid)
                 }
             }
-            let x = serde_json::to_string(&pins_to_add).unwrap();
-            dbg!(x);
-            "ok"
+
+            for cid in &pinset_should_pin {
+                if !ipfs_pinset.contains(cid) {
+                    review.pins_to_add.push(cid)
+                }
+            }
+
+            for cid in &ipfs_pinset {
+                if !pinset_should_pin.contains(&cid) {
+                    review.pins_to_rm.push(cid)
+                }
+            }
+
+            let review_result: String = serde_json::to_string(&review).unwrap();
+            review_result.leak() // TODO: how to return &str without using leak()?
         } else {
             "ipfs pin ls failed"
         }
