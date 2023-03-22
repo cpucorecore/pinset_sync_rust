@@ -5,7 +5,7 @@ host="127.0.0.1"
 port=8888
 worker=2
 
-[dependent_api]
+[proxy]
 host="127.0.0.1"
 ipfs_port=5001
 ipfs_cluster_port=9094
@@ -13,3 +13,4 @@ worker=32
 
 [db]
 path="db"
+

@@ -1,14 +1,14 @@
-use crate::settings::SETTINGS;
+use crate::settings::S;
 use crate::types::FileStat;
-use kv::Store;
 use kv::{Bucket, Config, Json};
+use kv::{Error, Store};
 use lazy_static::lazy_static;
 use log::{debug, error};
 use std::path::Path;
 
 lazy_static! {
     static ref DB: Store = {
-        let path = Path::new(SETTINGS.db.path.as_str());
+        let path = Path::new(S.db.path.as_str());
         let cfg = Config::new(path);
         Store::new(cfg).unwrap()
     };
@@ -17,16 +17,26 @@ lazy_static! {
         DB.bucket::<&str, String>(Some(pinset_db_name)).unwrap()
     };
     static ref PINSET_DB2: Bucket<'static, &'static str, Json<FileStat>> = {
-        let pinset_db_name = "pinset";
+        let pinset_db_name = "pinset2";
         DB.bucket::<&str, Json<FileStat>>(Some(pinset_db_name))
             .unwrap()
     };
 }
 
-pub fn pinset_set2(key: &str, value: FileStat) {
-    match PINSET_DB2.set(&key, &Json(value)) {
-        Err(err) => panic!("db set err: {}", err),
-        _ => (),
+pub fn pinset_set2(key: &String, value: FileStat) {
+    let x = DB.bucket::<String, Json<FileStat>>(Some("")).unwrap();
+    x.set(key, &Json(value));
+}
+
+pub fn pinset_get2(key: &String) -> Option<FileStat> {
+    let x = DB.bucket::<String, Json<FileStat>>(Some("")).unwrap();
+    match x.get(key) {
+        Ok(Some(v)) => Some(v.0),
+        Ok(None) => None,
+        Err(err) => {
+            error!("");
+            None
+        }
     }
 }
 
@@ -46,16 +56,5 @@ pub fn pinset_get(key: &str) -> Option<String> {
             None
         }
         Ok(r) => r,
-    }
-}
-
-pub fn pinset_get2(key: &str) -> Option<FileStat> {
-    match PINSET_DB2.get(&key) {
-        Err(err) => {
-            error!("db get err: {}", err);
-            None
-        }
-        Ok(Some(r)) => Some(r.0),
-        Ok(None) => None,
     }
 }

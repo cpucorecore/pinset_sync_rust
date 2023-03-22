@@ -1,6 +1,6 @@
 use actix_web::{App, HttpServer};
-use pinset_sync_rust::api::{gc, gc_review, hello, index, space_info, sync, sync_review};
-use pinset_sync_rust::settings::SETTINGS;
+use pinset_sync_rust::api::{gc, gc_review, space_info, sync, sync_review};
+use pinset_sync_rust::settings::S;
 use std::time::Duration;
 
 #[actix_web::main]
@@ -9,18 +9,16 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(|| {
         App::new()
-            .service(index)
-            .service(hello)
             .service(space_info)
             .service(sync_review)
             .service(sync)
             .service(gc_review)
             .service(gc)
     })
-    .workers(SETTINGS.api.worker)
+    .workers(S.api.worker)
     .client_request_timeout(Duration::from_secs(30))
     .keep_alive(Duration::from_secs(60))
-    .bind((SETTINGS.api.host.clone(), SETTINGS.api.port))?
+    .bind((S.api.host.clone(), S.api.port))?
     .run()
     .await
 }

@@ -11,7 +11,7 @@ pub struct Api {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct DependentApi {
+pub struct Proxy {
     pub host: String,
     pub ipfs_port: u16,
     pub ipfs_cluster_port: u16,
@@ -27,7 +27,7 @@ pub struct Db {
 pub struct Settings {
     pub debug: bool,
     pub api: Api,
-    pub dependent_api: DependentApi,
+    pub proxy: Proxy,
     pub db: Db,
 }
 
@@ -47,10 +47,10 @@ impl Settings {
 }
 
 lazy_static! {
-    pub static ref SETTINGS: Settings = Settings::new().unwrap();
+    pub static ref S: Settings = Settings::new().unwrap();
 }
 
 #[test]
 fn test_settings() {
-    println!("{:?}", SETTINGS.dependent_api);
+    println!("{:?}", S.proxy);
 }
