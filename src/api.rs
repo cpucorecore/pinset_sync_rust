@@ -15,11 +15,11 @@ async fn collect_ipfs_file_stat(cids: Vec<String>) -> Result<i64, ()> {
     let mut space_pinned = 0_i64;
 
     for cid in cids {
-        match db::pinset_get2(&cid) {
+        match db::get_file_stat(&cid) {
             None => match ipfs_file_stat(&cid).await {
                 Some(fs) => {
                     space_pinned += fs.cumulative_size;
-                    db::pinset_set2(&cid, fs);
+                    db::save_file_stat(&cid, fs);
                 }
                 None => {
                     error!("call api file stat failed");
