@@ -18,7 +18,8 @@ root:
 
 loggers:
   pinset_sync_rust:
-    level: info
+    level: debug
     appenders:
+      - file
       - stdout
     additive: false

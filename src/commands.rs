@@ -1,5 +1,5 @@
-use fork::{fork, Fork};
-use log::{debug, error};
+use fork::{daemon, fork, Fork};
+use log::{debug, error, info};
 use std::ffi::OsStr;
 use std::process::{exit, Command};
 use std::str::FromStr;
@@ -61,7 +61,8 @@ fn test_ipfs_pin_ls() {
 }
 
 pub fn start_cluster() -> Option<i32> {
-    do_daemon_command("/bin/bash", ["./scripts/daemon_cluster.sh"])
+    // do_daemon_command("/bin/bash", ["./scripts/daemon_cluster.sh"])
+    do_daemon_command("ipfs-cluster-service", Box::new(["daemon"]))
 }
 
 pub fn stop_cluster() -> Option<String> {
@@ -69,7 +70,8 @@ pub fn stop_cluster() -> Option<String> {
 }
 
 pub fn start_ipfs() -> Option<i32> {
-    do_daemon_command("/bin/bash", ["./scripts/daemon_ipfs.sh"])
+    // do_daemon_command("/bin/bash", ["./scripts/daemon_ipfs.sh"])
+    do_daemon_command("ipfs", Box::new(["daemon"]))
 }
 
 pub fn stop_ipfs() -> Option<String> {
@@ -97,31 +99,25 @@ where
     }
 }
 
-fn do_daemon_command<I, S>(command: &str, args: I) -> Option<i32>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
+fn do_daemon_command(command: &str, args: Box<[&str]>) -> Option<i32> {
     match fork() {
         Ok(Fork::Parent(child)) => {
-            println!(
+            info!(
                 "Continuing execution in parent process, new child has pid: {}",
                 child
             );
-            exit(0);
+            Some(child)
         }
         Ok(Fork::Child) => {
-            println!("I'm a new child process");
-            let output = Command::new(command)
-                .args(args)
-                .output()
-                .expect("run child process failed");
-            println!("status: {}", output.status);
-            assert!(output.status.success());
-            Some(output.status.code().unwrap())
+            if let Ok(Fork::Child) = daemon(false, false) {
+                let err = exec::Command::new(command).args(args.as_ref()).exec();
+                error!("Error: {}", err);
+                exit(-1);
+            }
+            Some(0)
         }
         Err(_) => {
-            println!("Fork failed");
+            error!("fork failed");
             None
         }
     }
