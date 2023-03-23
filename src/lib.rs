@@ -1,6 +1,9 @@
 pub mod api;
 pub mod automate_service;
-pub mod commands;
+pub mod cmd_common;
+pub mod cmd_executor;
+pub mod cmd_ipfs;
+pub mod cmd_ipfs_cluster;
 pub mod db;
 pub mod http_client;
 pub mod ipfs_cluster_proxy;

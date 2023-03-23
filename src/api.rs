@@ -1,10 +1,9 @@
-use crate::commands::{
-    cmd_ipfs_pin_ls, export_cluster_state, get_disk_free_space, ipfs_gc, start_cluster, start_ipfs,
-    stop_cluster, stop_ipfs,
-};
+use crate::cmd_common::get_disk_free_space;
+use crate::cmd_ipfs;
+use crate::cmd_ipfs_cluster::{export_cluster_state, start_cluster, stop_cluster};
 use crate::db;
-use crate::ipfs_cluster_proxy::{cluster_id, cluster_pin_ls};
-use crate::ipfs_proxy::{ipfs_file_stat, ipfs_pin_add, ipfs_pin_ls, ipfs_pin_rm, ipfs_repo_stat};
+use crate::ipfs_cluster_proxy as cluster_api;
+use crate::ipfs_proxy;
 use crate::settings::S;
 use crate::types::{SpaceInfo, SyncReview};
 use actix_web::rt::spawn;
@@ -16,7 +15,7 @@ async fn collect_ipfs_file_stat(cids: Vec<String>) -> Result<i64, ()> {
 
     for cid in cids {
         match db::get_file_stat(&cid) {
-            None => match ipfs_file_stat(&cid).await {
+            None => match ipfs_proxy::file_stat(&cid).await {
                 Some(fs) => {
                     space_pinned += fs.cumulative_size;
                     db::save_file_stat(&cid, fs);
@@ -57,7 +56,7 @@ pub async fn space_info() -> impl Responder {
 pub async fn get_space_info() -> Option<SpaceInfo> {
     let mut space_pinned = 0_i64;
 
-    let cids = ipfs_pin_ls().await.unwrap();
+    let cids = ipfs_proxy::pin_ls().await.unwrap();
 
     let mut thread_handles = vec![];
     let worklists = split_worklists(cids);
@@ -69,7 +68,7 @@ pub async fn get_space_info() -> Option<SpaceInfo> {
         space_pinned += handle.await.unwrap().unwrap()
     }
 
-    let stat = ipfs_repo_stat().await.unwrap();
+    let stat = ipfs_proxy::repo_stat().await.unwrap();
 
     Some(SpaceInfo {
         space_pinned,
@@ -94,7 +93,7 @@ pub async fn gc() -> impl Responder {
     }
     info!("cluster stopped");
 
-    if let None = stop_ipfs() {
+    if let None = cmd_ipfs::stop_ipfs() {
         // TODO: restart cluster
         return "stop ipfs failed";
     }
@@ -108,7 +107,7 @@ pub async fn gc() -> impl Responder {
         }
         Some(cluster_pinset) => {
             info!("cluster state export finish");
-            match cmd_ipfs_pin_ls() {
+            match cmd_ipfs::pin_ls() {
                 None => {
                     // TODO: restart cluster and ipfs
                     error!("ipfs pin ls failed");
@@ -116,7 +115,7 @@ pub async fn gc() -> impl Responder {
                 }
                 Some(ipfs_pinset) => {
                     info!("ipfs pin ls finish");
-                    match ipfs_gc() {
+                    match cmd_ipfs::gc() {
                         None => {
                             // TODO: restart cluster and ipfs
                             error!("ipfs gc failed");
@@ -124,7 +123,7 @@ pub async fn gc() -> impl Responder {
                         }
                         Some(_) => {
                             info!("ipfs gc finish");
-                            match start_ipfs() {
+                            match cmd_ipfs::start_ipfs() {
                                 None => {
                                     // TODO: restart cluster and ipfs
                                     error!("ipfs start failed");
@@ -204,7 +203,7 @@ pub async fn sync() -> impl Responder {
 async fn do_sync(review: &SyncReview) {
     // TODO: multiple thread do it
     for cid in &review.pins_to_add {
-        match ipfs_pin_add(cid).await {
+        match ipfs_proxy::pin_add(cid).await {
             Some(resp) => {
                 debug!("ipfs pin add resp:{}", resp);
             }
@@ -215,7 +214,7 @@ async fn do_sync(review: &SyncReview) {
     }
 
     for cid in &review.pins_to_rm {
-        match ipfs_pin_rm(cid).await {
+        match ipfs_proxy::pin_rm(cid).await {
             Some(resp) => {
                 debug!("ipfs pin rm resp:{}", resp);
             }
@@ -228,7 +227,7 @@ async fn do_sync(review: &SyncReview) {
 
 async fn get_sync_review() -> Option<SyncReview> {
     let id;
-    match cluster_id().await {
+    match cluster_api::id().await {
         Some(r) => id = r,
         None => {
             return {
@@ -246,8 +245,8 @@ async fn get_sync_review() -> Option<SyncReview> {
         pins_to_rm: vec![],
     };
 
-    if let Some(cluster_pinset) = cluster_pin_ls().await {
-        if let Some(ipfs_pinset) = ipfs_pin_ls().await {
+    if let Some(cluster_pinset) = cluster_api::allocations().await {
+        if let Some(ipfs_pinset) = ipfs_proxy::pin_ls().await {
             for cluster_pin in cluster_pinset {
                 if cluster_pin.allocations.contains(&id) {
                     pinset_should_pin.push(cluster_pin.cid)

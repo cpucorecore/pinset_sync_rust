@@ -44,7 +44,7 @@ pub fn parse_ipfs_file_stat(data: &String) -> Option<FileStat> {
     }
 }
 
-pub fn parse_cluster_state_export_output(output: &String) -> Option<Vec<ClusterPin>> {
+pub fn parse_cluster_allocations(output: &String) -> Option<Vec<ClusterPin>> {
     let mut pinset: Vec<ClusterPin> = vec![];
 
     let state_lines: Vec<&str> = output.split_whitespace().collect();

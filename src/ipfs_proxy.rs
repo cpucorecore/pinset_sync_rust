@@ -17,21 +17,21 @@ lazy_static! {
     );
 }
 
-pub async fn ipfs_id() -> Option<String> {
+pub async fn id() -> Option<String> {
     match do_post(&URL_ID).await {
         Some(resp) => parse_ipfs_id(&resp),
         None => None,
     }
 }
 
-pub async fn ipfs_repo_stat() -> Option<IpfsRepoStat> {
+pub async fn repo_stat() -> Option<IpfsRepoStat> {
     match do_post(&URL_REPO_STAT).await {
         Some(resp) => pare_ipfs_repo_stat(&resp),
         None => None,
     }
 }
 
-pub async fn ipfs_pin_ls() -> Option<Vec<String>> {
+pub async fn pin_ls() -> Option<Vec<String>> {
     match do_post(&URL_PIN_LS).await {
         Some(resp) => match parse_ipfs_pin_ls(&resp) {
             Some(pins) => Some(pins),
@@ -44,7 +44,7 @@ pub async fn ipfs_pin_ls() -> Option<Vec<String>> {
     }
 }
 
-pub async fn ipfs_file_stat(cid: &String) -> Option<FileStat> {
+pub async fn file_stat(cid: &String) -> Option<FileStat> {
     let url = format!(
         "http://{}:{}/api/v0/files/stat?arg=/ipfs/{}&size=true&with-local=false",
         S.proxy.host, S.proxy.ipfs_port, cid
@@ -59,7 +59,7 @@ pub async fn ipfs_file_stat(cid: &String) -> Option<FileStat> {
     }
 }
 
-pub async fn ipfs_pin_add(cid: &String) -> Option<String> {
+pub async fn pin_add(cid: &String) -> Option<String> {
     // curl -X POST "http://127.0.0.1:5001/api/v0/pin/add?arg=/ipfs/QmWgQg88bqTGtFK9Mq7Sq54HKMMFda5htMbkcNdptKMKK3&recursive=true&progress=false"
     let url = format!(
         "http://{}:{}/api/v0/pin/add?arg=/ipfs/{}",
@@ -68,7 +68,7 @@ pub async fn ipfs_pin_add(cid: &String) -> Option<String> {
     do_post(&url).await
 }
 
-pub async fn ipfs_pin_rm(cid: &String) -> Option<String> {
+pub async fn pin_rm(cid: &String) -> Option<String> {
     // curl -X POST "http://127.0.0.1:5001/api/v0/pin/rm?arg=/ipfs/QmWgQg88bqTGtFK9Mq7Sq54HKMMFda5htMbkcNdptKMKK3"
     let url = format!(
         "http://{}:{}/api/v0/pin/rm?arg=/ipfs/{}",
