@@ -27,32 +27,7 @@ async fn get_sync_review() -> Option<SyncReview> {
         ipfs_proxy::pin_ls().await,
     ) {
         (Some(cluster_pinset), Some(ipfs_pinset)) => {
-            let id = db::get_cluster_id().unwrap();
-            let mut cids_duty = vec![];
-            for pin in cluster_pinset {
-                if pin.allocations.contains(&id) {
-                    cids_duty.push(pin.cid)
-                }
-            }
-
-            let mut review = SyncReview {
-                cids_to_add: vec![],
-                cids_to_rm: vec![],
-            };
-
-            for cid in &cids_duty {
-                if !ipfs_pinset.contains(cid) {
-                    review.cids_to_add.push(cid.clone())
-                }
-            }
-
-            for cid in &ipfs_pinset {
-                if !cids_duty.contains(&cid) {
-                    review.cids_to_rm.push(cid.clone())
-                }
-            }
-
-            Some(review)
+            Some(cross_pinset(cluster_pinset, ipfs_pinset))
         }
         _ => {
             error!("call api failed");
@@ -150,32 +125,34 @@ async fn get_space_info() -> SpaceInfo {
     }
 }
 
-fn cross_pinset(cluster_pinset: &Vec<Pin>, ipfs_pinset: &Vec<String>) -> SyncReview {
+fn cross_pinset(cluster_pinset: Vec<Pin>, ipfs_pinset: Vec<String>) -> SyncReview {
     let mut review = SyncReview {
         cids_to_add: vec![],
         cids_to_rm: vec![],
     };
 
-    let mut pinset_should_pin = vec![];
+    let mut cids_duty = vec![];
 
     let cluster_id = db::get_cluster_id().unwrap();
     for cluster_pin in cluster_pinset {
         if cluster_pin.allocations.contains(&cluster_id) {
-            pinset_should_pin.push(cluster_pin.cid)
+            cids_duty.push(cluster_pin.cid)
         }
     }
 
-    for cid in &pinset_should_pin {
+    for cid in &cids_duty {
         if !ipfs_pinset.contains(cid) {
-            review.cids_to_add.push(cid.clone())
+            review.cids_to_add.push((*cid).clone())
         }
     }
 
-    for cid in &ipfs_pinset {
-        if !pinset_should_pin.contains(&cid) {
-            review.cids_to_rm.push(cid.clone())
+    for cid in ipfs_pinset {
+        if !cids_duty.contains(&cid) {
+            review.cids_to_rm.push(cid)
         }
     }
+
+    review
 }
 
 // TODO: 1. global status for query; 2. session; 3. gc lock
@@ -210,13 +187,13 @@ pub async fn gc() -> impl Responder {
         Some(ipfs_pinset) => {
             info!("ipfs pin ls finish");
 
-            match cmd_ipfs::gc() {
+            return match cmd_ipfs::gc() {
                 None => {
                     cmd_ipfs::start_ipfs();
                     cmd_ipfs_cluster::start_cluster();
 
                     error!("ipfs gc failed");
-                    return "ipfs gc failed";
+                    "ipfs gc failed"
                 }
                 Some(_) => {
                     info!("ipfs gc finish");
@@ -224,41 +201,18 @@ pub async fn gc() -> impl Responder {
                     match cmd_ipfs::start_ipfs() {
                         None => {
                             error!("ipfs start failed");
-                            return "ipfs start failed";
+                            "ipfs start failed"
                         }
                         Some(ipfs_pid) => {
                             info!("ipfs started, pid: {}", ipfs_pid);
 
-                            let mut pinset_should_pin = vec![];
-                            let mut review = SyncReview {
-                                cids_to_add: vec![],
-                                cids_to_rm: vec![],
-                            };
-
-                            let cluster_id = db::get_cluster_id().unwrap();
-                            for cluster_pin in cluster_pinset {
-                                if cluster_pin.allocations.contains(&cluster_id) {
-                                    pinset_should_pin.push(cluster_pin.cid)
-                                }
-                            }
-
-                            for cid in &pinset_should_pin {
-                                if !ipfs_pinset.contains(cid) {
-                                    review.cids_to_add.push(cid.clone())
-                                }
-                            }
-
-                            for cid in &ipfs_pinset {
-                                if !pinset_should_pin.contains(&cid) {
-                                    review.cids_to_rm.push(cid.clone())
-                                }
-                            }
+                            let review = cross_pinset(cluster_pinset, ipfs_pinset);
 
                             sleep(Duration::from_secs(5)).await; // wait ipfs startup. TODO: detect by loop api call
                             do_sync(&review).await;
                             debug!("do_sync finish");
 
-                            return match cmd_ipfs_cluster::start_cluster() {
+                            match cmd_ipfs_cluster::start_cluster() {
                                 None => {
                                     error!("start cluster failed");
                                     "start cluster failed"
@@ -267,11 +221,11 @@ pub async fn gc() -> impl Responder {
                                     info!("cluster started, pid: {}", cluster_pid);
                                     "ok"
                                 }
-                            };
+                            }
                         }
                     }
                 }
-            }
+            };
         }
     }
 }
