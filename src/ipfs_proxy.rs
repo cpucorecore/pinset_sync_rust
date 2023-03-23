@@ -1,9 +1,10 @@
 use crate::http_client::do_post;
+use crate::parser::parse_ipfs_pin_ls;
 use crate::settings::S;
-use crate::types::{FileStat, IpfsRepoStat};
-use crate::utils::{pare_ipfs_repo_stat, parse_ipfs_file_stat, parse_ipfs_id, parse_ipfs_pin_ls};
+use crate::types_ipfs::{FileStat, Id, RepoStat};
 use lazy_static::lazy_static;
 use log::error;
+use std::str::FromStr;
 
 lazy_static! {
     static ref URL_ID: String = format!("http://{}:{}/api/v0/id", S.proxy.host, S.proxy.ipfs_port);
@@ -17,28 +18,46 @@ lazy_static! {
     );
 }
 
-pub async fn id() -> Option<String> {
+pub async fn id() -> Option<Id> {
     match do_post(&URL_ID).await {
-        Some(resp) => parse_ipfs_id(&resp),
-        None => None,
+        Some(id_str) => match Id::from_str(&id_str) {
+            Ok(id_obj) => Some(id_obj),
+            Err(err) => {
+                error!("Id from str:[{}] err: {}", id_str, err);
+                None
+            }
+        },
+        None => {
+            error!("call ipfs api:id failed");
+            None
+        }
     }
 }
 
-pub async fn repo_stat() -> Option<IpfsRepoStat> {
+pub async fn repo_stat() -> Option<RepoStat> {
     match do_post(&URL_REPO_STAT).await {
-        Some(resp) => pare_ipfs_repo_stat(&resp),
-        None => None,
+        Some(repo_stat_str) => match RepoStat::from_str(&repo_stat_str) {
+            Ok(repo_stat_obj) => Some(repo_stat_obj),
+            Err(err) => {
+                error!("RepoStat from str:[{}] err: {}", repo_stat_str, err);
+                None
+            }
+        },
+        None => {
+            error!("call ipfs api:repo_stat failed");
+            None
+        }
     }
 }
 
 pub async fn pin_ls() -> Option<Vec<String>> {
     match do_post(&URL_PIN_LS).await {
-        Some(resp) => match parse_ipfs_pin_ls(&resp) {
+        Some(pin_ls_str) => match parse_ipfs_pin_ls(&pin_ls_str) {
             Some(pins) => Some(pins),
             None => None,
         },
         None => {
-            error!("ipfs pin ls failed");
+            error!("call ipfs api:pin_ls failed");
             None
         }
     }
@@ -51,9 +70,15 @@ pub async fn file_stat(cid: &String) -> Option<FileStat> {
     );
 
     match do_post(&url).await {
-        Some(resp) => parse_ipfs_file_stat(&resp),
+        Some(file_stat_str) => match FileStat::from_str(&file_stat_str) {
+            Ok(file_stat_obj) => Some(file_stat_obj),
+            Err(err) => {
+                error!("FileStat from str:[{}] err: {}", file_stat_str, err);
+                None
+            }
+        },
         None => {
-            error!("ipfs pin ls failed");
+            error!("call ipfs api:file_stat failed");
             None
         }
     }

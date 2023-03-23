@@ -99,81 +99,74 @@ pub async fn gc() -> impl Responder {
     }
     info!("ipfs stopped");
 
-    match export_cluster_state() {
+    let cluster_pinset = export_cluster_state();
+
+    info!("cluster state export finish");
+    match cmd_ipfs::pin_ls() {
         None => {
             // TODO: restart cluster and ipfs
-            error!("cluster state export failed");
-            return "cluster state export failed";
+            error!("ipfs pin ls failed");
+            return "ipfs pin ls failed";
         }
-        Some(cluster_pinset) => {
-            info!("cluster state export finish");
-            match cmd_ipfs::pin_ls() {
+        Some(ipfs_pinset) => {
+            info!("ipfs pin ls finish");
+            match cmd_ipfs::gc() {
                 None => {
                     // TODO: restart cluster and ipfs
-                    error!("ipfs pin ls failed");
-                    return "ipfs pin ls failed";
+                    error!("ipfs gc failed");
+                    return "ipfs gc failed";
                 }
-                Some(ipfs_pinset) => {
-                    info!("ipfs pin ls finish");
-                    match cmd_ipfs::gc() {
+                Some(_) => {
+                    info!("ipfs gc finish");
+                    match cmd_ipfs::start_ipfs() {
                         None => {
                             // TODO: restart cluster and ipfs
-                            error!("ipfs gc failed");
-                            return "ipfs gc failed";
+                            error!("ipfs start failed");
+                            return "ipfs start failed";
                         }
-                        Some(_) => {
-                            info!("ipfs gc finish");
-                            match cmd_ipfs::start_ipfs() {
-                                None => {
-                                    // TODO: restart cluster and ipfs
-                                    error!("ipfs start failed");
-                                    return "ipfs start failed";
-                                }
-                                Some(ipfs_pid) => {
-                                    info!("ipfs started, pid: {}", ipfs_pid);
+                        Some(ipfs_pid) => {
+                            info!("ipfs started, pid: {}", ipfs_pid);
 
-                                    let mut pinset_should_pin = vec![];
-                                    let mut review = SyncReview {
-                                        pins_to_add: vec![],
-                                        pins_to_rm: vec![],
-                                    };
+                            let mut pinset_should_pin = vec![];
+                            let mut review = SyncReview {
+                                pins_to_add: vec![],
+                                pins_to_rm: vec![],
+                            };
 
-                                    for cluster_pin in cluster_pinset {
-                                        if cluster_pin.allocations.contains(&id) {
-                                            pinset_should_pin.push(cluster_pin.cid)
-                                        }
-                                    }
-
-                                    for cid in &pinset_should_pin {
-                                        if !ipfs_pinset.contains(cid) {
-                                            review.pins_to_add.push(cid.clone())
-                                        }
-                                    }
-
-                                    for cid in &ipfs_pinset {
-                                        if !pinset_should_pin.contains(&cid) {
-                                            review.pins_to_rm.push(cid.clone())
-                                        }
-                                    }
-
-                                    debug!("do_sync begin"); //TODO wait ipfs api setup finish
-                                    do_sync(&review).await;
-                                    debug!("do_sync finish");
-
-                                    match start_cluster() {
-                                        None => {
-                                            error!("start cluster failed");
-                                        }
-                                        Some(cluster_pid) => {
-                                            info!("cluster started, pid: {}", cluster_pid);
-                                            return "ok";
-                                        }
-                                    }
+                            for cluster_pin in cluster_pinset {
+                                if cluster_pin.allocations.contains(&id) {
+                                    pinset_should_pin.push(cluster_pin.cid)
                                 }
                             }
-                            ""
+
+                            for cid in &pinset_should_pin {
+                                if !ipfs_pinset.contains(cid) {
+                                    review.pins_to_add.push(cid.clone())
+                                }
+                            }
+
+                            for cid in &ipfs_pinset {
+                                if !pinset_should_pin.contains(&cid) {
+                                    review.pins_to_rm.push(cid.clone())
+                                }
+                            }
+
+                            debug!("do_sync begin"); //TODO wait ipfs api setup finish
+                            do_sync(&review).await;
+                            debug!("do_sync finish");
+
+                            match start_cluster() {
+                                None => {
+                                    error!("start cluster failed");
+                                }
+                                Some(cluster_pid) => {
+                                    info!("cluster started, pid: {}", cluster_pid);
+                                    return "ok";
+                                }
+                            }
                         }
                     }
+                    ""
                 }
             }
         }
@@ -248,7 +241,7 @@ async fn get_sync_review() -> Option<SyncReview> {
     if let Some(cluster_pinset) = cluster_api::allocations().await {
         if let Some(ipfs_pinset) = ipfs_proxy::pin_ls().await {
             for cluster_pin in cluster_pinset {
-                if cluster_pin.allocations.contains(&id) {
+                if cluster_pin.allocations.contains(&id.id) {
                     pinset_should_pin.push(cluster_pin.cid)
                 }
             }

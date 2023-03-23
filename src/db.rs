@@ -1,5 +1,5 @@
 use crate::settings::S;
-use crate::types::FileStat;
+use crate::types_ipfs::FileStat;
 use kv::Store;
 use kv::{Bucket, Config, Json};
 use lazy_static::lazy_static;

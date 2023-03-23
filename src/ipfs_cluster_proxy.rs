@@ -1,9 +1,10 @@
 use crate::http_client::do_get;
+use crate::parser::parse_cluster_allocations;
 use crate::settings::S;
-use crate::types::ClusterPin;
-use crate::utils::{parse_cluster_allocations, parse_cluster_id};
+use crate::types_ipfs_cluster::{Id, Pin};
 use lazy_static::lazy_static;
 use log::error;
+use std::str::FromStr;
 
 lazy_static! {
     static ref URL_ID: String = format!("http://{}:{}/id", S.proxy.host, S.proxy.ipfs_cluster_port);
@@ -13,18 +14,9 @@ lazy_static! {
     );
 }
 
-pub async fn allocations() -> Option<Vec<ClusterPin>> {
+pub async fn allocations() -> Option<Vec<Pin>> {
     match do_get(&URL_ALLOCATIONS).await {
-        Some(allocations_str) => match parse_cluster_allocations(&allocations_str) {
-            Some(allocations) => Some(allocations),
-            None => {
-                error!(
-                    "parse cluster allocations failed, the allocations_str: [{}]",
-                    allocations_str
-                );
-                None
-            }
-        },
+        Some(allocations_str) => Some(parse_cluster_allocations(&allocations_str)),
         None => {
             error!("call cluster api:allocations failed");
             None
@@ -32,12 +24,12 @@ pub async fn allocations() -> Option<Vec<ClusterPin>> {
     }
 }
 
-pub async fn id() -> Option<String> {
+pub async fn id() -> Option<Id> {
     match do_get(&URL_ID).await {
-        Some(id_str) => match parse_cluster_id(&id_str) {
-            Some(id) => Some(id),
-            None => {
-                error!("parse cluster id failed, the id_str: [{}]", id_str);
+        Some(id_str) => match Id::from_str(&id_str) {
+            Ok(id_obj) => Some(id_obj),
+            Err(err) => {
+                error!("Id from str:[{}] err: {}", id_str, err);
                 None
             }
         },
