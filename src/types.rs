@@ -1,4 +1,5 @@
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
 pub struct SpaceInfo {
@@ -10,6 +11,12 @@ pub struct SpaceInfo {
 
 #[derive(Debug, Serialize)]
 pub struct SyncReview {
-    pub pins_to_add: Vec<String>,
-    pub pins_to_rm: Vec<String>,
+    pub cids_to_add: Vec<String>,
+    pub cids_to_rm: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncResult {
+    pub add_result: HashMap<String, bool>,
+    pub rm_result: HashMap<String, bool>,
 }

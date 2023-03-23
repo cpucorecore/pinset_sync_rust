@@ -2,50 +2,109 @@ use crate::cmd_common::get_disk_free_space;
 use crate::cmd_ipfs;
 use crate::cmd_ipfs_cluster::{export_cluster_state, start_cluster, stop_cluster};
 use crate::db;
-use crate::ipfs_cluster_proxy as cluster_api;
+use crate::ipfs_cluster_proxy;
 use crate::ipfs_proxy;
 use crate::settings::S;
-use crate::types::{SpaceInfo, SyncReview};
+use crate::types::{SpaceInfo, SyncResult, SyncReview};
 use actix_web::rt::spawn;
 use actix_web::{get, Responder};
 use log::{debug, error, info};
 
-async fn collect_ipfs_file_stat(cids: Vec<String>) -> Result<i64, ()> {
-    let mut space_pinned = 0_i64;
-
-    for cid in cids {
-        match db::get_file_stat(&cid) {
-            None => match ipfs_proxy::file_stat(&cid).await {
-                Some(fs) => {
-                    space_pinned += fs.cumulative_size;
-                    db::save_file_stat(&cid, fs);
-                }
-                None => {
-                    error!("call api file stat failed");
-                }
-            },
-            Some(fs) => {
-                space_pinned += fs.cumulative_size;
-            }
-        };
+#[get("/sync_review")]
+pub async fn sync_review() -> impl Responder {
+    match get_sync_review().await {
+        Some(review) => serde_json::to_string(&review).unwrap(),
+        None => "call api failed".to_string(),
     }
-
-    Ok(space_pinned)
 }
 
-fn split_worklists(mut cids: Vec<String>) -> Vec<Vec<String>> {
-    let mut worklists = vec![];
+async fn get_sync_review() -> Option<SyncReview> {
+    match (
+        ipfs_cluster_proxy::allocations().await,
+        ipfs_proxy::pin_ls().await,
+    ) {
+        (Some(cluster_pinset), Some(ipfs_pinset)) => {
+            let id = db::get_cluster_id().unwrap();
+            let mut cids_duty = vec![];
+            for pin in cluster_pinset {
+                if pin.allocations.contains(&id) {
+                    cids_duty.push(pin.cid)
+                }
+            }
 
-    let batch_size = cids.len() / S.proxy.worker;
-    let _ = (0..S.proxy.worker - 1).map(|_| {
-        let batch: Vec<String> = cids.drain(0..batch_size).collect();
-        worklists.push(batch);
-    });
+            let mut review = SyncReview {
+                cids_to_add: vec![],
+                cids_to_rm: vec![],
+            };
 
-    let last_batch: Vec<String> = cids.drain(0..cids.len()).collect();
-    worklists.push(last_batch);
+            for cid in &cids_duty {
+                if !ipfs_pinset.contains(cid) {
+                    review.cids_to_add.push(cid.clone())
+                }
+            }
 
-    worklists
+            for cid in &ipfs_pinset {
+                if !cids_duty.contains(&cid) {
+                    review.cids_to_rm.push(cid.clone())
+                }
+            }
+
+            Some(review)
+        }
+        _ => {
+            error!("call api failed");
+            None
+        }
+    }
+}
+
+#[get("/sync")]
+pub async fn sync() -> impl Responder {
+    // TODO: 1. sync lock; 2. sync status;
+    match get_sync_review().await {
+        Some(review) => {
+            let sync_result = do_sync(&review).await;
+            serde_json::to_string(&sync_result).unwrap()
+        }
+        None => "call api failed".to_string(),
+    }
+}
+
+async fn do_sync(review: &SyncReview) -> SyncResult {
+    // TODO: multiple thread do it, with flow control
+
+    let mut result = SyncResult {
+        add_result: Default::default(),
+        rm_result: Default::default(),
+    };
+
+    for cid in &review.cids_to_add {
+        match ipfs_proxy::pin_add(cid).await {
+            Some(resp) => {
+                debug!("ipfs pin add resp:{}", resp);
+                result.add_result.insert(cid.clone(), true);
+            }
+            None => {
+                error!("ipfs pin add failed");
+                result.add_result.insert(cid.clone(), false);
+            }
+        }
+    }
+
+    for cid in &review.cids_to_rm {
+        match ipfs_proxy::pin_rm(cid).await {
+            Some(resp) => {
+                debug!("ipfs pin rm resp:{}", resp);
+                result.rm_result.insert(cid.clone(), true);
+            }
+            None => {
+                error!("ipfs pin rm failed");
+                result.rm_result.insert(cid.clone(), false);
+            }
+        }
+    }
+
+    result
 }
 
 #[get("/space_info")]
@@ -53,41 +112,44 @@ pub async fn space_info() -> impl Responder {
     serde_json::to_string(&get_space_info().await).unwrap()
 }
 
-pub async fn get_space_info() -> Option<SpaceInfo> {
+async fn get_space_info() -> SpaceInfo {
     let mut space_pinned = 0_i64;
+    if let Some(cids) = ipfs_proxy::pin_ls().await {
+        let mut handles = vec![];
+        let worklist = split_worklist(cids);
+        for work in worklist {
+            handles.push(spawn(collect_ipfs_file_stat(work)));
+        }
 
-    let cids = ipfs_proxy::pin_ls().await.unwrap();
-
-    let mut thread_handles = vec![];
-    let worklists = split_worklists(cids);
-    for worklist in worklists {
-        thread_handles.push(spawn(collect_ipfs_file_stat(worklist)));
+        for handle in handles {
+            space_pinned += handle.await.unwrap();
+        }
+    } else {
+        space_pinned = -1;
     }
 
-    for handle in thread_handles {
-        space_pinned += handle.await.unwrap().unwrap()
+    let mut space_used = -1;
+    let mut space_ipfs_total = -1;
+    match ipfs_proxy::repo_stat().await {
+        None => {}
+        Some(stat) => {
+            space_used = stat.repo_size;
+            space_ipfs_total = stat.storage_max;
+        }
     }
 
-    let stat = ipfs_proxy::repo_stat().await.unwrap();
-
-    Some(SpaceInfo {
+    SpaceInfo {
         space_pinned,
-        space_used: stat.repo_size,
-        space_ipfs_total: stat.storage_max,
+        space_used,
+        space_ipfs_total,
         space_disk_free: get_disk_free_space(),
-    })
-}
-
-#[get("/gc_review")]
-pub async fn gc_review() -> impl Responder {
-    let si = get_space_info().await.unwrap();
-    serde_json::to_string(&si).unwrap()
+    }
 }
 
 #[get("/gc")]
 pub async fn gc() -> impl Responder {
-    let id = "12D3KooWJ7b5LSbZJmRvrgGQVoSyVM6bTQdjtSc6cBpLWoZTQKXH".to_string(); // TODO: get from db
-                                                                                 // TODO: 1. global status for query; 2. session; 3. gc lock
+    // TODO: 1. global status for query; 2. session; 3. gc lock
+
     if let None = stop_cluster() {
         return "stop cluster failed";
     }
@@ -129,25 +191,26 @@ pub async fn gc() -> impl Responder {
 
                             let mut pinset_should_pin = vec![];
                             let mut review = SyncReview {
-                                pins_to_add: vec![],
-                                pins_to_rm: vec![],
+                                cids_to_add: vec![],
+                                cids_to_rm: vec![],
                             };
 
+                            let cluster_id = db::get_cluster_id().unwrap();
                             for cluster_pin in cluster_pinset {
-                                if cluster_pin.allocations.contains(&id) {
+                                if cluster_pin.allocations.contains(&cluster_id) {
                                     pinset_should_pin.push(cluster_pin.cid)
                                 }
                             }
 
                             for cid in &pinset_should_pin {
                                 if !ipfs_pinset.contains(cid) {
-                                    review.pins_to_add.push(cid.clone())
+                                    review.cids_to_add.push(cid.clone())
                                 }
                             }
 
                             for cid in &ipfs_pinset {
                                 if !pinset_should_pin.contains(&cid) {
-                                    review.pins_to_rm.push(cid.clone())
+                                    review.cids_to_rm.push(cid.clone())
                                 }
                             }
 
@@ -173,98 +236,46 @@ pub async fn gc() -> impl Responder {
     }
 }
 
-#[get("/sync_review")]
-pub async fn sync_review() -> impl Responder {
-    match get_sync_review().await {
-        Some(review) => serde_json::to_string(&review).unwrap(),
-        None => "get_sync_review failed".to_string(),
+fn split_worklist(mut cids: Vec<String>) -> Vec<Vec<String>> {
+    let mut worklist = vec![];
+    if cids.len() == 0 {
+        return worklist;
     }
+
+    let mut work_size = cids.len() / S.proxy.worker;
+    if work_size == 0 {
+        work_size = 1
+    }
+
+    (0..S.proxy.worker - 1)
+        .map(|_| {
+            let batch: Vec<String> = cids.drain(0..work_size).collect();
+            worklist.push(batch);
+        })
+        .count();
+
+    let last_batch: Vec<String> = cids.drain(0..cids.len()).collect();
+    worklist.push(last_batch);
+
+    worklist
 }
 
-#[get("/sync")]
-pub async fn sync() -> impl Responder {
-    // TODO: 1. sync lock; 2. sync status;
-    match get_sync_review().await {
-        Some(review) => {
-            do_sync(&review).await;
-            "ok"
-        }
-        None => "get_sync_review failed",
-    }
-}
+async fn collect_ipfs_file_stat(cids: Vec<String>) -> i64 {
+    let mut space_pinned = 0_i64;
 
-async fn do_sync(review: &SyncReview) {
-    // TODO: multiple thread do it
-    for cid in &review.pins_to_add {
-        match ipfs_proxy::pin_add(cid).await {
-            Some(resp) => {
-                debug!("ipfs pin add resp:{}", resp);
-            }
+    for cid in cids {
+        match db::get_file_stat(&cid) {
             None => {
-                error!("ipfs pin add failed");
-            }
-        }
-    }
-
-    for cid in &review.pins_to_rm {
-        match ipfs_proxy::pin_rm(cid).await {
-            Some(resp) => {
-                debug!("ipfs pin rm resp:{}", resp);
-            }
-            None => {
-                error!("ipfs pin rm failed");
-            }
-        }
-    }
-}
-
-async fn get_sync_review() -> Option<SyncReview> {
-    let id;
-    match cluster_api::id().await {
-        Some(r) => id = r,
-        None => {
-            return {
-                error!("get cluster id failed");
-                None
-            }
-        }
-    }
-
-    let mut pinset_should_pin = vec![];
-
-    // TODO: check pins_to_add across pins_to_rm
-    let mut review = SyncReview {
-        pins_to_add: vec![],
-        pins_to_rm: vec![],
-    };
-
-    if let Some(cluster_pinset) = cluster_api::allocations().await {
-        if let Some(ipfs_pinset) = ipfs_proxy::pin_ls().await {
-            for cluster_pin in cluster_pinset {
-                if cluster_pin.allocations.contains(&id.id) {
-                    pinset_should_pin.push(cluster_pin.cid)
+                if let Some(fs) = ipfs_proxy::file_stat(&cid).await {
+                    space_pinned += fs.cumulative_size;
+                    db::save_file_stat(&cid, fs);
                 }
             }
-
-            for cid in &pinset_should_pin {
-                if !ipfs_pinset.contains(cid) {
-                    review.pins_to_add.push(cid.clone())
-                }
+            Some(fs) => {
+                space_pinned += fs.cumulative_size;
             }
-
-            for cid in &ipfs_pinset {
-                if !pinset_should_pin.contains(&cid) {
-                    review.pins_to_rm.push(cid.clone())
-                }
-            }
-
-            Some(review)
-        } else {
-            error!("ipfs pin ls failed");
-            None
-        }
-    } else {
-        error!("cluster pin ls failed");
-        None
+        };
     }
+
+    space_pinned
 }

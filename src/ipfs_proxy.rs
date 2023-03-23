@@ -85,7 +85,6 @@ pub async fn file_stat(cid: &String) -> Option<FileStat> {
 }
 
 pub async fn pin_add(cid: &String) -> Option<String> {
-    // curl -X POST "http://127.0.0.1:5001/api/v0/pin/add?arg=/ipfs/QmWgQg88bqTGtFK9Mq7Sq54HKMMFda5htMbkcNdptKMKK3&recursive=true&progress=false"
     let url = format!(
         "http://{}:{}/api/v0/pin/add?arg=/ipfs/{}",
         S.proxy.host, S.proxy.ipfs_port, cid
@@ -94,7 +93,6 @@ pub async fn pin_add(cid: &String) -> Option<String> {
 }
 
 pub async fn pin_rm(cid: &String) -> Option<String> {
-    // curl -X POST "http://127.0.0.1:5001/api/v0/pin/rm?arg=/ipfs/QmWgQg88bqTGtFK9Mq7Sq54HKMMFda5htMbkcNdptKMKK3"
     let url = format!(
         "http://{}:{}/api/v0/pin/rm?arg=/ipfs/{}",
         S.proxy.host, S.proxy.ipfs_port, cid

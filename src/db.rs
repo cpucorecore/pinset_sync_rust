@@ -16,6 +16,7 @@ lazy_static! {
         DB.bucket::<&str, String>(Some("c")).unwrap();
     static ref FILE_STAT: Bucket<'static, &'static str, Json<FileStat>> =
         DB.bucket::<&str, Json<FileStat>>(Some("p")).unwrap();
+    static ref K_CLUSTER_ID: String = "id".to_string();
 }
 
 pub fn save_file_stat(key: &str, value: FileStat) {
@@ -47,18 +48,21 @@ pub fn get_file_stat(key: &str) -> Option<FileStat> {
     }
 }
 
-pub fn set(key: &str, value: &String) {
-    debug!("db set: k-{}, v-{}", key, value);
+pub fn set(key: &str, value: &String) -> Option<String> {
+    debug!("db set: [{}]-[{}]", key, value);
 
     match COMMON.set(&key, &value) {
-        Err(err) => panic!("db set err: {}", err),
-        Ok(Some(v)) => debug!("set return: {:?}", v),
-        Ok(None) => (),
+        Err(err) => {
+            error!("db set err: {}", err);
+            None
+        }
+        Ok(Some(old_value)) => Some(old_value),
+        Ok(None) => None,
     }
 }
 
 pub fn get(key: &str) -> Option<String> {
-    debug!("db get: k-{}", key);
+    debug!("db get key: [{}]", key);
 
     match COMMON.get(&key) {
         Err(err) => {
@@ -67,4 +71,25 @@ pub fn get(key: &str) -> Option<String> {
         }
         Ok(r) => r,
     }
+}
+
+pub fn rm(key: &str) -> Option<String> {
+    debug!("db rm key: [{}]", key);
+
+    match COMMON.remove(&key) {
+        Err(err) => {
+            error!("db remove err: {}", err);
+            None
+        }
+        Ok(None) => None,
+        Ok(Some(v)) => Some(v),
+    }
+}
+
+pub fn get_cluster_id() -> Option<String> {
+    get(&K_CLUSTER_ID)
+}
+
+pub fn save_cluster_id(id: &String) {
+    set(&K_CLUSTER_ID, id);
 }
