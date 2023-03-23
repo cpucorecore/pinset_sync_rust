@@ -8,7 +8,6 @@ pub fn export_cluster_state() -> Vec<Pin> {
 }
 
 pub fn start_cluster() -> Option<i32> {
-    // do_daemon_command("/bin/bash", ["./scripts/daemon_cluster.sh"])
     do_daemon_cmd("ipfs-cluster-service", Box::new(["daemon"]))
 }
 
