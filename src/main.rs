@@ -5,12 +5,22 @@ use pinset_sync_rust::api::{gc, space_info, sync, sync_review};
 use pinset_sync_rust::db;
 use pinset_sync_rust::ipfs_cluster_proxy as cluster_api;
 use pinset_sync_rust::settings::S;
+use signal_hook::{consts::SIGINT, iterator::Signals};
+use std::thread;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     setup().await;
 
-    HttpServer::new(|| {
+    let mut signals = Signals::new(&[SIGINT])?;
+    let j = thread::spawn(move || {
+        for sig in signals.forever() {
+            println!("Received signal {:?}", sig);
+            db::flush();
+        }
+    });
+
+    let result = HttpServer::new(|| {
         App::new()
             .service(sync_review)
             .service(sync)
@@ -20,7 +30,11 @@ async fn main() -> std::io::Result<()> {
     .workers(S.api.worker)
     .bind((S.api.host.clone(), S.api.port))?
     .run()
-    .await
+    .await;
+
+    j.join().unwrap();
+
+    result
 }
 
 async fn setup() {

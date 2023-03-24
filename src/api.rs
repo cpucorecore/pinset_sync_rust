@@ -5,7 +5,7 @@ use crate::db;
 use crate::ipfs_cluster_proxy;
 use crate::ipfs_proxy;
 use crate::settings::S;
-use crate::types::{SpaceInfo, SyncResult, SyncReview};
+use crate::types::{GcResult, SpaceInfo, SyncResult, SyncReview};
 use crate::types_ipfs_cluster::Pin;
 use actix_web::rt::spawn;
 use actix_web::{get, Responder};
@@ -160,16 +160,17 @@ fn cross_pinset(cluster_pinset: Vec<Pin>, ipfs_pinset: Vec<String>) -> SyncRevie
 pub async fn gc() -> impl Responder {
     // TODO: detect ipfs and ipfs cluster alive
 
+    let before_gc = get_space_info().await;
     if let None = cmd_ipfs_cluster::stop_cluster() {
         error!("stop cluster failed");
-        return "stop cluster failed";
+        return "stop cluster failed".to_string();
     }
     info!("cluster stopped");
 
     if let None = cmd_ipfs::stop_ipfs() {
         error!("stop ipfs failed");
         cmd_ipfs_cluster::start_cluster(); // TODO: check success?
-        return "stop ipfs failed";
+        return "stop ipfs failed".to_string();
     }
     info!("ipfs stopped");
 
@@ -182,7 +183,7 @@ pub async fn gc() -> impl Responder {
             cmd_ipfs_cluster::start_cluster();
 
             error!("ipfs pin ls failed");
-            return "ipfs pin ls failed";
+            return "ipfs pin ls failed".to_string();
         }
         Some(ipfs_pinset) => {
             info!("ipfs pin ls finish");
@@ -193,7 +194,7 @@ pub async fn gc() -> impl Responder {
                     cmd_ipfs_cluster::start_cluster();
 
                     error!("ipfs gc failed");
-                    "ipfs gc failed"
+                    "ipfs gc failed".to_string()
                 }
                 Some(_) => {
                     info!("ipfs gc finish");
@@ -201,25 +202,31 @@ pub async fn gc() -> impl Responder {
                     match cmd_ipfs::start_ipfs() {
                         None => {
                             error!("ipfs start failed");
-                            "ipfs start failed"
+                            "ipfs start failed".to_string()
                         }
                         Some(ipfs_pid) => {
                             info!("ipfs started, pid: {}", ipfs_pid);
 
                             let review = cross_pinset(cluster_pinset, ipfs_pinset);
 
-                            sleep(Duration::from_secs(5)).await; // wait ipfs startup. TODO: detect by loop api call
+                            sleep(Duration::from_secs(3)).await; // wait ipfs startup. TODO: detect by loop api call
                             do_sync(&review).await;
-                            debug!("do_sync finish");
+                            info!("do_sync finish");
 
                             match cmd_ipfs_cluster::start_cluster() {
                                 None => {
                                     error!("start cluster failed");
-                                    "start cluster failed"
+                                    "start cluster failed".to_string()
                                 }
                                 Some(cluster_pid) => {
                                     info!("cluster started, pid: {}", cluster_pid);
-                                    "ok"
+                                    sleep(Duration::from_secs(3)).await; // wait ipfs startup. TODO: detect by loop api call
+                                    let after_gc = get_space_info().await;
+                                    serde_json::to_string(&GcResult {
+                                        before_gc,
+                                        after_gc,
+                                    })
+                                    .unwrap()
                                 }
                             }
                         }

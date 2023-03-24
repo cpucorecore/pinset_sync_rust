@@ -93,3 +93,10 @@ pub fn get_cluster_id() -> Option<String> {
 pub fn save_cluster_id(id: &String) {
     set(&K_CLUSTER_ID, id);
 }
+
+pub fn flush() {
+    debug!("flush start");
+    COMMON.flush().unwrap();
+    FILE_STAT.flush().unwrap();
+    debug!("flush end");
+}

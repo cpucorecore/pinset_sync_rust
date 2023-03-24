@@ -15,6 +15,7 @@ pub struct Proxy {
     pub host: String,
     pub ipfs_port: u16,
     pub ipfs_cluster_port: u16,
+    pub timeout: u64,
     pub worker: usize,
 }
 

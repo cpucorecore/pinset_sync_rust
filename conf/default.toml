@@ -2,13 +2,14 @@ debug = true
 
 [api]
 host="127.0.0.1"
-port=8888
+port=8889
 worker=2
 
 [proxy]
 host="127.0.0.1"
 ipfs_port=5001
 ipfs_cluster_port=9094
+timeout=300
 worker=16
 
 [db]
