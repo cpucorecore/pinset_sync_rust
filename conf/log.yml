@@ -2,13 +2,13 @@ appenders:
   stdout:
     kind: console
     encoder:
-      pattern: "[Console] {d} - {l} - {t} - {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S)} | {({l}):5.5} | {f}:{L} - {m}{n}"
 
   file:
     kind: file
     path: "logs/log.log"
     encoder:
-      pattern: "[File] {d} - {l} - {t} - {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S)} | {({l}):5.5} | {f}:{L} - {m}{n}"
 
 root:
   level: info
