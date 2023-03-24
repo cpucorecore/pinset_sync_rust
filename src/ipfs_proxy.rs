@@ -86,7 +86,7 @@ pub async fn file_stat(cid: &String) -> Option<FileStat> {
 
 pub async fn pin_add(cid: &String) -> Option<String> {
     let url = format!(
-        "http://{}:{}/api/v0/pin/add?arg=/ipfs/{}",
+        "http://{}:{}/api/v0/pin/add?arg=/ipfs/{}&progress=true",
         S.proxy.host, S.proxy.ipfs_port, cid
     );
     do_post(&url).await

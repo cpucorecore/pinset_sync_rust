@@ -29,7 +29,7 @@ async fn setup() {
         if let Some(id) = cluster_api::id().await {
             db::save_cluster_id(&id.id)
         } else {
-            panic!("setup: call api(cluster id) failed");
+            panic!("setup: call api(cluster id) failed"); // TODO: not panic for deploy ipfs?
         }
     }
 }

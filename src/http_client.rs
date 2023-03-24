@@ -10,7 +10,10 @@ pub async fn do_post(url: &str) -> Option<String> {
 
     match CLI.post(url).send().await {
         Ok(resp) => match resp.text().await {
-            Ok(text) => Some(text),
+            Ok(text) => {
+                debug!("get http req(post) resp: {}", &text);
+                Some(text)
+            }
             Err(err) => {
                 error!("get http req(post) resp err: {}", err);
                 None
