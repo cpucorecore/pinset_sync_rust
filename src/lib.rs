@@ -1,5 +1,4 @@
 pub mod api;
-pub mod automate_service;
 pub mod cmd_common;
 pub mod cmd_executor;
 pub mod cmd_ipfs;
@@ -10,6 +9,7 @@ pub mod ipfs_cluster_proxy;
 pub mod ipfs_proxy;
 pub mod parser;
 pub mod settings;
+pub mod state;
 pub mod types;
 pub mod types_ipfs;
 pub mod types_ipfs_cluster;
