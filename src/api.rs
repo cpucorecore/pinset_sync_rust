@@ -10,6 +10,7 @@ use crate::types_ipfs_cluster::Pin;
 use actix_web::rt::spawn;
 use actix_web::{get, Responder};
 use log::{debug, error, info};
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -41,45 +42,89 @@ pub async fn sync() -> impl Responder {
     // TODO: 1. sync lock; 2. sync status;
     match get_sync_review().await {
         Some(review) => {
-            let sync_result = do_sync(&review).await;
+            let sync_result = do_sync(review).await;
             serde_json::to_string(&sync_result).unwrap()
         }
         None => "call api failed".to_string(),
     }
 }
 
-async fn do_sync(review: &SyncReview) -> SyncResult {
-    // TODO: multiple thread do it, with flow control
+async fn worker_pin_add(cids: Vec<String>) -> HashMap<String, bool> {
+    let mut result = HashMap::default();
 
+    for cid in cids {
+        match ipfs_proxy::pin_add(&cid).await {
+            Some(resp) => {
+                debug!("ipfs pin add resp:{}", resp);
+                result.insert(cid.clone(), true);
+            }
+            None => {
+                error!("ipfs pin add failed");
+                result.insert(cid.clone(), false);
+            }
+        }
+    }
+
+    result
+}
+
+async fn worker_pin_rm(cids: Vec<String>) -> HashMap<String, bool> {
+    let mut result = HashMap::default();
+
+    for cid in cids {
+        match ipfs_proxy::pin_rm(&cid).await {
+            Some(resp) => {
+                debug!("ipfs pin rm resp:{}", resp);
+                result.insert(cid, true);
+            }
+            None => {
+                error!("ipfs pin rm failed");
+                result.insert(cid, false);
+            }
+        }
+    }
+
+    result
+}
+
+async fn do_sync(review: SyncReview) -> SyncResult {
     let mut result = SyncResult {
         add_result: Default::default(),
         rm_result: Default::default(),
     };
 
-    for cid in &review.cids_to_add {
-        match ipfs_proxy::pin_add(cid).await {
-            Some(resp) => {
-                debug!("ipfs pin add resp:{}", resp);
-                result.add_result.insert(cid.clone(), true);
-            }
-            None => {
-                error!("ipfs pin add failed");
-                result.add_result.insert(cid.clone(), false);
-            }
-        }
+    let mut handles_add = vec![];
+    let worklist_add = split_worklist(review.cids_to_add);
+    for work in worklist_add {
+        handles_add.push(spawn(worker_pin_add(work)));
     }
 
-    for cid in &review.cids_to_rm {
-        match ipfs_proxy::pin_rm(cid).await {
-            Some(resp) => {
-                debug!("ipfs pin rm resp:{}", resp);
-                result.rm_result.insert(cid.clone(), true);
-            }
-            None => {
-                error!("ipfs pin rm failed");
-                result.rm_result.insert(cid.clone(), false);
-            }
-        }
+    for handle in handles_add {
+        handle
+            .await
+            .unwrap()
+            .drain()
+            .map(|(k, v)| {
+                result.add_result.insert(k, v);
+            })
+            .count();
+    }
+
+    let mut handles_rm = vec![];
+    let worklist_rm = split_worklist(review.cids_to_rm);
+    for work in worklist_rm {
+        handles_rm.push(spawn(worker_pin_rm(work)));
+    }
+
+    for handle in handles_rm {
+        handle
+            .await
+            .unwrap()
+            .drain()
+            .map(|(k, v)| {
+                result.rm_result.insert(k, v);
+            })
+            .count();
     }
 
     result
@@ -117,11 +162,14 @@ async fn get_space_info() -> SpaceInfo {
         }
     }
 
+    let space_disk_free = get_disk_free_space();
+
     SpaceInfo {
         space_pinned,
         space_used,
         space_ipfs_total,
-        space_disk_free: get_disk_free_space(),
+        space_disk_free,
+        pin_percentage: (space_pinned * 100 / space_used) as i8,
     }
 }
 
@@ -210,7 +258,7 @@ pub async fn gc() -> impl Responder {
                             let review = cross_pinset(cluster_pinset, ipfs_pinset);
 
                             sleep(Duration::from_secs(3)).await; // wait ipfs startup. TODO: detect by loop api call
-                            do_sync(&review).await;
+                            do_sync(review).await;
                             info!("do_sync finish");
 
                             match cmd_ipfs_cluster::start_cluster() {

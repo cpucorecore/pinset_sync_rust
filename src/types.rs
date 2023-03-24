@@ -7,6 +7,7 @@ pub struct SpaceInfo {
     pub space_used: i64,
     pub space_ipfs_total: i64,
     pub space_disk_free: i64,
+    pub pin_percentage: i8,
 }
 
 #[derive(Debug, Serialize)]
