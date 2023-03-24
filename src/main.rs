@@ -6,6 +6,7 @@ use pinset_sync_rust::db;
 use pinset_sync_rust::ipfs_cluster_proxy as cluster_api;
 use pinset_sync_rust::settings::S;
 use signal_hook::{consts::SIGINT, iterator::Signals};
+use std::process::exit;
 use std::thread;
 
 #[actix_web::main]
@@ -17,6 +18,7 @@ async fn main() -> std::io::Result<()> {
         for sig in signals.forever() {
             println!("Received signal {:?}", sig);
             db::flush();
+            exit(0);
         }
     });
 
