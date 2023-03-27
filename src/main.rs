@@ -1,7 +1,9 @@
 extern crate core;
 
 use actix_web::{web, App, HttpServer};
-use pinset_sync_rust::api::{gc, get_state, space_info, sync, sync_review};
+use pinset_sync_rust::api::{
+    gc, get_state, space_info, start_ipfs, start_ipfs_cluster, sync, sync_review,
+};
 use pinset_sync_rust::db;
 use pinset_sync_rust::ipfs_cluster_proxy as cluster_api;
 use pinset_sync_rust::settings::S;
@@ -33,6 +35,8 @@ async fn main() -> std::io::Result<()> {
             .service(sync)
             .service(space_info)
             .service(gc)
+            .service(start_ipfs)
+            .service(start_ipfs_cluster)
     })
     .workers(S.api.worker)
     .bind((S.api.host.clone(), S.api.port))?

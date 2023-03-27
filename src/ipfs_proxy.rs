@@ -5,6 +5,8 @@ use crate::types_ipfs::{FileStat, Id, RepoStat};
 use lazy_static::lazy_static;
 use log::error;
 use std::str::FromStr;
+use std::time::Duration;
+use tokio::time::sleep;
 
 lazy_static! {
     static ref URL_ID: String = format!("http://{}:{}/api/v0/id", S.proxy.host, S.proxy.ipfs_port);
@@ -39,6 +41,20 @@ pub async fn alive() -> bool {
         Some(_) => true,
         None => false,
     }
+}
+
+pub async fn wait_alive(max_retry: i32) -> bool {
+    let mut cnt = 1;
+    return loop {
+        if alive().await {
+            break true;
+        } else if cnt >= max_retry {
+            sleep(Duration::from_secs(1)).await;
+            break false;
+        } else {
+            cnt += 1;
+        }
+    };
 }
 
 pub async fn repo_stat() -> Option<RepoStat> {

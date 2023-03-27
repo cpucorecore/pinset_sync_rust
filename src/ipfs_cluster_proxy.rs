@@ -5,6 +5,8 @@ use crate::types_ipfs_cluster::{Id, Pin};
 use lazy_static::lazy_static;
 use log::error;
 use std::str::FromStr;
+use std::time::Duration;
+use tokio::time::sleep;
 
 lazy_static! {
     static ref URL_ID: String = format!("http://{}:{}/id", S.proxy.host, S.proxy.ipfs_cluster_port);
@@ -45,4 +47,18 @@ pub async fn alive() -> bool {
         Some(_) => true,
         None => false,
     }
+}
+
+pub async fn wait_alive(max_retry: i32) -> bool {
+    let mut cnt = 1;
+    return loop {
+        if alive().await {
+            break true;
+        } else if cnt >= max_retry {
+            sleep(Duration::from_secs(1)).await;
+            break false;
+        } else {
+            cnt += 1;
+        }
+    };
 }

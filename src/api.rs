@@ -13,9 +13,7 @@ use actix_web::web::Data;
 use actix_web::{get, Responder};
 use log::{debug, error, info};
 use std::collections::HashMap;
-use std::time::Duration;
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 
 #[get("/get_state")]
 pub async fn get_state() -> impl Responder {
@@ -292,7 +290,10 @@ pub async fn gc(lock: Data<Mutex<i32>>) -> impl Responder {
 
                                     let review = cross_pinset(cluster_pinset, ipfs_pinset);
 
-                                    sleep(Duration::from_secs(3)).await; // wait ipfs startup. TODO: detect by loop api call
+                                    if false == ipfs_proxy::wait_alive(3).await {
+                                        error!("ipfs api not alive, to check ipfs is started");
+                                    }
+
                                     db::set_state_status(Status::Gc(GcStatus::Syncing));
                                     do_sync(review).await;
                                     info!("do_sync finish");
@@ -305,7 +306,7 @@ pub async fn gc(lock: Data<Mutex<i32>>) -> impl Responder {
                                         }
                                         Some(cluster_pid) => {
                                             info!("cluster started, pid: {}", cluster_pid);
-                                            sleep(Duration::from_secs(3)).await; // wait ipfs startup. TODO: detect by loop api call
+                                            ipfs_cluster_proxy::wait_alive(3).await;
                                             let after_gc = get_space_info().await;
                                             serde_json::to_string(&GcResult {
                                                 before_gc,
