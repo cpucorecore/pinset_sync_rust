@@ -1,4 +1,5 @@
 use crate::settings::S;
+use crate::state::{State, Status};
 use crate::types_ipfs::FileStat;
 use kv::Store;
 use kv::{Bucket, Config, Json};
@@ -48,7 +49,7 @@ pub fn get_file_stat(key: &str) -> Option<FileStat> {
     }
 }
 
-pub fn set(key: &str, value: &String) -> Option<String> {
+pub fn set(key: &str, value: String) -> Option<String> {
     debug!("db set: [{}]-[{}]", key, value);
 
     match COMMON.set(&key, &value) {
@@ -90,7 +91,7 @@ pub fn get_cluster_id() -> Option<String> {
     get(&K_CLUSTER_ID)
 }
 
-pub fn save_cluster_id(id: &String) {
+pub fn save_cluster_id(id: String) {
     set(&K_CLUSTER_ID, id);
 }
 
@@ -99,4 +100,17 @@ pub fn flush() {
     COMMON.flush().unwrap();
     FILE_STAT.flush().unwrap();
     debug!("flush end");
+}
+
+pub fn set_state_status(status: Status) {
+    let mut s = State::default();
+    s.status = status;
+    set("state", s.info());
+}
+
+pub fn get_state() -> String {
+    match get("state") {
+        Some(s) => s,
+        None => State::default().info(),
+    }
 }
