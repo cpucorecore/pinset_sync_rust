@@ -1,10 +1,10 @@
 pid=`ps -ef|grep "ipfs daemon" | grep -v "grep" | awk '{print $2}'`
-if [ -z $pid ]; then
+if [ -z "$pid" ]; then
 	echo already stoped
 else
-	echo pid $pid alive, to kill it
-	ipfs_repo_lock=`lsof -p $pid |grep lock |awk '{print $9}'`
-	kill $pid
+	echo pid "$pid" alive, to kill it
+	ipfs_repo_lock=$(lsof -p $pid |grep lock |awk '{print $9}')
+	kill "$pid"
 
 	while true;
 	do
