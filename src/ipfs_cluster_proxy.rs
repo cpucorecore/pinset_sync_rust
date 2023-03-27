@@ -39,3 +39,10 @@ pub async fn id() -> Option<Id> {
         }
     }
 }
+
+pub async fn alive() -> bool {
+    match id().await {
+        Some(_) => true,
+        None => false,
+    }
+}

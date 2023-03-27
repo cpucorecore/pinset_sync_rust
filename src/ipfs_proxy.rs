@@ -34,6 +34,13 @@ pub async fn id() -> Option<Id> {
     }
 }
 
+pub async fn alive() -> bool {
+    match id().await {
+        Some(_) => true,
+        None => false,
+    }
+}
+
 pub async fn repo_stat() -> Option<RepoStat> {
     match do_post(&URL_REPO_STAT).await {
         Some(repo_stat_str) => match RepoStat::from_str(&repo_stat_str) {

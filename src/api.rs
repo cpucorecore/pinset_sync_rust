@@ -227,7 +227,9 @@ fn cross_pinset(cluster_pinset: Vec<Pin>, ipfs_pinset: Vec<String>) -> SyncRevie
 
 #[get("/gc")]
 pub async fn gc(lock: Data<Mutex<i32>>) -> impl Responder {
-    // TODO: detect ipfs and ipfs cluster alive
+    if let (false, false) = (ipfs_proxy::alive().await, ipfs_cluster_proxy::alive().await) {
+        return "ipfs and ipfs-cluster are not running".to_string();
+    }
 
     debug!("gc try get lock");
     match lock.try_lock() {
@@ -371,4 +373,36 @@ async fn collect_ipfs_file_stat(cids: Vec<String>) -> i64 {
     }
 
     space_pinned
+}
+
+#[get("/start_ipfs")]
+pub async fn start_ipfs() -> impl Responder {
+    if let true = ipfs_proxy::alive().await {
+        info!("ipfs already running");
+        return "ipfs already running".to_string();
+    }
+
+    if let Some(pid) = cmd_ipfs::start_ipfs() {
+        info!("ipfs started, pid: {}", pid);
+        return pid.to_string();
+    }
+
+    error!("ipfs start failed");
+    "ipfs start failed".to_string()
+}
+
+#[get("/start_ipfs_cluster")]
+pub async fn start_ipfs_cluster() -> impl Responder {
+    if let true = ipfs_cluster_proxy::alive().await {
+        info!("cluster already running");
+        return "cluster already running".to_string();
+    }
+
+    if let Some(pid) = cmd_ipfs_cluster::start_cluster() {
+        info!("cluster started, pid: {}", pid);
+        return pid.to_string();
+    }
+
+    error!("cluster start failed");
+    "cluster start failed".to_string()
 }
