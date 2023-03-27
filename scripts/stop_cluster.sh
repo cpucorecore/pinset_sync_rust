@@ -1,4 +1,4 @@
-pid=`ps -ef|grep ipfs-cluster-ser |grep -v grep |awk '{print $2}'`
+pid=`ps -ef|grep ipfs-cluster-service |grep -v grep |awk '{print $2}'`
 if [ -z $pid ]; then
 	echo already stoped
 else
