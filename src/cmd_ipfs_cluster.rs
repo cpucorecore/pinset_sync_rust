@@ -1,10 +1,16 @@
 use crate::cmd_executor::{do_cmd, do_daemon_cmd};
 use crate::parser::parse_cluster_allocations;
 use crate::types_ipfs_cluster::Pin;
+use log::error;
 
-pub fn export_cluster_state() -> Vec<Pin> {
-    let output = do_cmd("ipfs-cluster-service", ["state", "export"]).expect("export state failed");
-    parse_cluster_allocations(&output)
+pub fn export_cluster_state() -> Option<Vec<Pin>> {
+    match do_cmd("ipfs-cluster-service", ["state", "export"]) {
+        Some(output) => Some(parse_cluster_allocations(&output)),
+        None => {
+            error!("ipfs-cluster-service state export failed");
+            None
+        }
+    }
 }
 
 pub fn start_cluster() -> Option<i32> {

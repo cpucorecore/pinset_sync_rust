@@ -10,13 +10,12 @@ pub enum SyncStatus {
 pub enum GcStatus {
     ClusterStopped,
     IpfsStopped,
-    ClusterStateExporting,
     ClusterStateExported,
-    IpfsPinLs,
     IpfsPinLsFinish,
-    DoGc,
     GcFinish,
+    IpfsStarted,
     Syncing,
+    ClusterStarted,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

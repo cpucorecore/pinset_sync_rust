@@ -9,7 +9,7 @@ use crate::state::{GcStatus, Status, SyncStatus};
 use crate::types::{GcResult, SpaceInfo, SyncResult, SyncReview};
 use crate::types_ipfs_cluster::Pin;
 use actix_web::rt::spawn;
-use actix_web::web::Data;
+use actix_web::web::{Data, Json};
 use actix_web::{get, Responder};
 use log::{debug, error, info};
 use std::collections::HashMap;
@@ -225,108 +225,101 @@ fn cross_pinset(cluster_pinset: Vec<Pin>, ipfs_pinset: Vec<String>) -> SyncRevie
 
 #[get("/gc")]
 pub async fn gc(lock: Data<Mutex<i32>>) -> impl Responder {
-    if let (false, false) = (ipfs_proxy::alive().await, ipfs_cluster_proxy::alive().await) {
-        return "ipfs and ipfs-cluster are not running".to_string();
+    let mut result: GcResult = GcResult {
+        err_msg: "ok".to_string(),
+        before_gc: Default::default(),
+        after_gc: Default::default(),
+    };
+
+    loop {
+        if let false = ipfs_proxy::alive().await {
+            result.err_msg = "ipfs is not running".to_string();
+            error!("{}", &result.err_msg);
+            break;
+        }
+
+        if let false = ipfs_cluster_proxy::alive().await {
+            result.err_msg = "ipfs-cluster is not running".to_string();
+            error!("{}", &result.err_msg);
+            break;
+        }
+
+        match lock.try_lock() {
+            Err(err) => {
+                result.err_msg = format!("gc try lock err: {}", err);
+                error!("{}", &result.err_msg);
+                break;
+            }
+            Ok(mut tx_id) => *tx_id += 1,
+        };
+        info!("gc try_lock success");
+
+        result.before_gc = get_space_info().await;
+
+        debug!("gc stop_cluster");
+        if let None = cmd_ipfs_cluster::stop_cluster() {
+            result.err_msg = "stop_cluster failed".to_string();
+            error!("{}", &result.err_msg);
+            break;
+        }
+        info!("gc stop_cluster success");
+        db::set_state_status(Status::Gc(GcStatus::ClusterStopped));
+
+        debug!("gc stop_ipfs");
+        if let None = cmd_ipfs::stop_ipfs() {
+            result.err_msg = "stop_ipfs failed".to_string();
+            error!("{}", &result.err_msg);
+            break;
+        }
+        info!("gc stop_ipfs success");
+        db::set_state_status(Status::Gc(GcStatus::IpfsStopped));
+
+        let review: SyncReview;
+        if let (Some(cluster_pinset), Some(ipfs_pinset)) =
+            (cmd_ipfs_cluster::export_cluster_state(), cmd_ipfs::pin_ls())
+        {
+            review = cross_pinset(cluster_pinset, ipfs_pinset)
+        } else {
+            break;
+        }
+
+        debug!("ipfs gc");
+        if let None = cmd_ipfs::gc() {
+            result.err_msg = "ipfs gc failed".to_string();
+            break;
+        }
+        info!("ipfs gc success");
+        db::set_state_status(Status::Gc(GcStatus::GcFinish));
+
+        if let None = cmd_ipfs::start_ipfs() {
+            result.err_msg = "ipfs start failed".to_string();
+            break;
+        }
+
+        db::set_state_status(Status::Gc(GcStatus::IpfsStarted));
+
+        if false == ipfs_proxy::wait_alive(5).await {
+            error!("ipfs api not alive, to check ipfs is started");
+        }
+
+        db::set_state_status(Status::Gc(GcStatus::Syncing));
+        do_sync(review).await;
+        info!("do_sync finish");
+        db::set_state_status(Status::Idle);
+
+        if let None = cmd_ipfs_cluster::start_cluster() {
+            result.err_msg = "start_cluster failed".to_string();
+            break;
+        }
+
+        db::set_state_status(Status::Gc(GcStatus::ClusterStarted));
+        ipfs_cluster_proxy::wait_alive(5).await;
+        result.after_gc = get_space_info().await;
+
+        break;
     }
 
-    debug!("gc try get lock");
-    match lock.try_lock() {
-        Ok(mut tx_id) => {
-            debug!("gc get lock");
-            *tx_id += 1;
-            let before_gc = get_space_info().await;
-            if let None = cmd_ipfs_cluster::stop_cluster() {
-                error!("stop cluster failed");
-                return "stop cluster failed".to_string();
-            }
-            info!("cluster stopped");
-            db::set_state_status(Status::Gc(GcStatus::ClusterStopped));
-
-            if let None = cmd_ipfs::stop_ipfs() {
-                error!("stop ipfs failed");
-                cmd_ipfs_cluster::start_cluster(); // TODO: check success?
-                return "stop ipfs failed".to_string();
-            }
-            info!("ipfs stopped");
-            db::set_state_status(Status::Gc(GcStatus::IpfsStopped));
-
-            db::set_state_status(Status::Gc(GcStatus::ClusterStateExporting));
-            let cluster_pinset = cmd_ipfs_cluster::export_cluster_state();
-            info!("cluster state export finish");
-            db::set_state_status(Status::Gc(GcStatus::ClusterStateExported));
-
-            db::set_state_status(Status::Gc(GcStatus::IpfsPinLs));
-            return match cmd_ipfs::pin_ls() {
-                None => {
-                    cmd_ipfs::start_ipfs();
-                    cmd_ipfs_cluster::start_cluster();
-
-                    error!("ipfs pin ls failed");
-                    "ipfs pin ls failed".to_string()
-                }
-                Some(ipfs_pinset) => {
-                    info!("ipfs pin ls finish");
-                    db::set_state_status(Status::Gc(GcStatus::IpfsPinLsFinish));
-                    db::set_state_status(Status::Gc(GcStatus::DoGc));
-                    match cmd_ipfs::gc() {
-                        None => {
-                            cmd_ipfs::start_ipfs();
-                            cmd_ipfs_cluster::start_cluster();
-
-                            error!("ipfs gc failed");
-                            "ipfs gc failed".to_string()
-                        }
-                        Some(_) => {
-                            info!("ipfs gc finish");
-                            db::set_state_status(Status::Gc(GcStatus::GcFinish));
-
-                            match cmd_ipfs::start_ipfs() {
-                                None => {
-                                    error!("ipfs start failed");
-                                    "ipfs start failed".to_string()
-                                }
-                                Some(ipfs_pid) => {
-                                    info!("ipfs started, pid: {}", ipfs_pid);
-
-                                    let review = cross_pinset(cluster_pinset, ipfs_pinset);
-
-                                    if false == ipfs_proxy::wait_alive(3).await {
-                                        error!("ipfs api not alive, to check ipfs is started");
-                                    }
-
-                                    db::set_state_status(Status::Gc(GcStatus::Syncing));
-                                    do_sync(review).await;
-                                    info!("do_sync finish");
-                                    db::set_state_status(Status::Idle);
-
-                                    match cmd_ipfs_cluster::start_cluster() {
-                                        None => {
-                                            error!("start cluster failed");
-                                            "start cluster failed".to_string()
-                                        }
-                                        Some(cluster_pid) => {
-                                            info!("cluster started, pid: {}", cluster_pid);
-                                            ipfs_cluster_proxy::wait_alive(3).await;
-                                            let after_gc = get_space_info().await;
-                                            serde_json::to_string(&GcResult {
-                                                before_gc,
-                                                after_gc,
-                                            })
-                                            .unwrap()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            };
-        }
-        Err(_) => {
-            error!("gc lock failed");
-            db::get_state()
-        }
-    }
+    Json(result)
 }
 
 fn split_worklist(mut cids: Vec<String>) -> Vec<Vec<String>> {

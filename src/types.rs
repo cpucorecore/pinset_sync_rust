@@ -1,7 +1,7 @@
 use serde_derive::Serialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 pub struct SpaceInfo {
     pub space_pinned: i64,
     pub space_used: i64,
@@ -24,6 +24,7 @@ pub struct SyncResult {
 
 #[derive(Debug, Serialize)]
 pub struct GcResult {
+    pub err_msg: String,
     pub before_gc: SpaceInfo,
     pub after_gc: SpaceInfo,
 }

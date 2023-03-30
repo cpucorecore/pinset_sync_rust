@@ -5,8 +5,7 @@ use crate::types_ipfs_cluster::{Id, Pin};
 use lazy_static::lazy_static;
 use log::error;
 use std::str::FromStr;
-use std::time::Duration;
-use tokio::time::sleep;
+use tokio::time::{sleep, Duration};
 
 lazy_static! {
     static ref URL_ID: String = format!("http://{}:{}/id", S.proxy.host, S.proxy.ipfs_cluster_port);
@@ -17,7 +16,7 @@ lazy_static! {
 }
 
 pub async fn allocations() -> Option<Vec<Pin>> {
-    match do_get(&URL_ALLOCATIONS).await {
+    match do_get(&URL_ALLOCATIONS, S.proxy.timeout_allocations).await {
         Some(allocations_str) => Some(parse_cluster_allocations(&allocations_str)),
         None => {
             error!("call cluster api:allocations failed");
@@ -27,7 +26,7 @@ pub async fn allocations() -> Option<Vec<Pin>> {
 }
 
 pub async fn id() -> Option<Id> {
-    match do_get(&URL_ID).await {
+    match do_get(&URL_ID, S.proxy.timeout).await {
         Some(id_str) => match Id::from_str(&id_str) {
             Ok(id_obj) => Some(id_obj),
             Err(err) => {
@@ -54,11 +53,13 @@ pub async fn wait_alive(max_retry: i32) -> bool {
     return loop {
         if alive().await {
             break true;
-        } else if cnt >= max_retry {
-            sleep(Duration::from_secs(1)).await;
-            break false;
         } else {
-            cnt += 1;
+            if cnt >= max_retry {
+                break false;
+            } else {
+                cnt += 1;
+            }
         }
+        sleep(Duration::from_secs(1)).await;
     };
 }

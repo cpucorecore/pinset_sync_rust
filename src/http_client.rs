@@ -8,10 +8,15 @@ lazy_static! {
     static ref CLI: Client = Client::new();
     static ref TIMEOUT: Duration = Duration::from_secs(S.proxy.timeout);
 }
-pub async fn do_post(url: &str) -> Option<String> {
+pub async fn do_post(url: &str, timeout: u64) -> Option<String> {
     debug!("http post req: {}", url);
 
-    match CLI.post(url).timeout(*TIMEOUT).send().await {
+    match CLI
+        .post(url)
+        .timeout(Duration::from_secs(timeout))
+        .send()
+        .await
+    {
         Ok(resp) => match resp.text().await {
             Ok(text) => {
                 debug!("get http req(post) resp: {}", &text);
@@ -29,10 +34,15 @@ pub async fn do_post(url: &str) -> Option<String> {
     }
 }
 
-pub async fn do_get(url: &str) -> Option<String> {
+pub async fn do_get(url: &str, timeout: u64) -> Option<String> {
     debug!("http get req: {}", url);
 
-    match CLI.get(url).timeout(*TIMEOUT).send().await {
+    match CLI
+        .get(url)
+        .timeout(Duration::from_secs(timeout))
+        .send()
+        .await
+    {
         Ok(resp) => match resp.text().await {
             Ok(text) => Some(text),
             Err(err) => {

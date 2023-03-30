@@ -16,6 +16,9 @@ pub struct Proxy {
     pub ipfs_port: u16,
     pub ipfs_cluster_port: u16,
     pub timeout: u64,
+    pub timeout_pin: u64,
+    pub timeout_allocations: u64,
+    pub timeout_pin_ls: u64,
     pub worker: usize,
 }
 

@@ -5,8 +5,7 @@ use crate::types_ipfs::{FileStat, Id, RepoStat};
 use lazy_static::lazy_static;
 use log::error;
 use std::str::FromStr;
-use std::time::Duration;
-use tokio::time::sleep;
+use tokio::time::{sleep, Duration};
 
 lazy_static! {
     static ref URL_ID: String = format!("http://{}:{}/api/v0/id", S.proxy.host, S.proxy.ipfs_port);
@@ -21,7 +20,7 @@ lazy_static! {
 }
 
 pub async fn id() -> Option<Id> {
-    match do_post(&URL_ID).await {
+    match do_post(&URL_ID, S.proxy.timeout).await {
         Some(id_str) => match Id::from_str(&id_str) {
             Ok(id_obj) => Some(id_obj),
             Err(err) => {
@@ -48,17 +47,19 @@ pub async fn wait_alive(max_retry: i32) -> bool {
     return loop {
         if alive().await {
             break true;
-        } else if cnt >= max_retry {
-            sleep(Duration::from_secs(1)).await;
-            break false;
         } else {
-            cnt += 1;
+            if cnt >= max_retry {
+                break false;
+            } else {
+                cnt += 1;
+            }
         }
+        sleep(Duration::from_secs(1)).await;
     };
 }
 
 pub async fn repo_stat() -> Option<RepoStat> {
-    match do_post(&URL_REPO_STAT).await {
+    match do_post(&URL_REPO_STAT, S.proxy.timeout).await {
         Some(repo_stat_str) => match RepoStat::from_str(&repo_stat_str) {
             Ok(repo_stat_obj) => Some(repo_stat_obj),
             Err(err) => {
@@ -74,7 +75,7 @@ pub async fn repo_stat() -> Option<RepoStat> {
 }
 
 pub async fn pin_ls() -> Option<Vec<String>> {
-    match do_post(&URL_PIN_LS).await {
+    match do_post(&URL_PIN_LS, S.proxy.timeout_pin_ls).await {
         Some(pin_ls_str) => match parse_ipfs_pin_ls(&pin_ls_str) {
             Some(pins) => Some(pins),
             None => None,
@@ -92,7 +93,7 @@ pub async fn file_stat(cid: &String) -> Option<FileStat> {
         S.proxy.host, S.proxy.ipfs_port, cid
     );
 
-    match do_post(&url).await {
+    match do_post(&url, S.proxy.timeout).await {
         Some(file_stat_str) => match FileStat::from_str(&file_stat_str) {
             Ok(file_stat_obj) => Some(file_stat_obj),
             Err(err) => {
@@ -112,7 +113,7 @@ pub async fn pin_add(cid: &String) -> Option<String> {
         "http://{}:{}/api/v0/pin/add?arg=/ipfs/{}&progress=true",
         S.proxy.host, S.proxy.ipfs_port, cid
     );
-    do_post(&url).await
+    do_post(&url, S.proxy.timeout_pin).await
 }
 
 pub async fn pin_rm(cid: &String) -> Option<String> {
@@ -120,5 +121,5 @@ pub async fn pin_rm(cid: &String) -> Option<String> {
         "http://{}:{}/api/v0/pin/rm?arg=/ipfs/{}",
         S.proxy.host, S.proxy.ipfs_port, cid
     );
-    do_post(&url).await
+    do_post(&url, S.proxy.timeout).await
 }
