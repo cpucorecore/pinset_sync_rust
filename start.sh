@@ -1,0 +1,1 @@
+nohup ./pinset_sync_rust &!
