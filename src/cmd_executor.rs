@@ -1,7 +1,7 @@
-use fork::{daemon, fork, Fork};
-use log::{error, info};
+use fork::{fork, setsid, Fork};
+use log::{debug, error, info};
 use std::ffi::OsStr;
-use std::process::Command;
+use std::process::{exit, Command};
 
 pub fn do_cmd<I, S>(command: &str, args: I) -> Option<String>
 where
@@ -26,19 +26,37 @@ where
 pub fn do_daemon_cmd(command: &str, args: Box<[&str]>) -> Option<i32> {
     match fork() {
         Ok(Fork::Parent(child)) => {
-            info!(
-                "Continuing execution in parent process, new child has pid: {}",
-                child
-            );
+            debug!("parent process continue, new child has pid: {}", child);
             Some(child)
         }
-        Ok(Fork::Child) => {
-            if let Ok(Fork::Child) = daemon(false, false) {
-                let err = exec::Command::new(command).args(args.as_ref()).exec();
-                error!("fork-fork-exec program err: {}", err);
+        Ok(Fork::Child) => match setsid() {
+            Ok(gid) => {
+                debug!("in child process: setsid success, gid: {}", gid);
+                match fork() {
+                    Ok(Fork::Parent(child)) => {
+                        info!(
+                            "child process exit, new grandson process has pid: {}",
+                            child
+                        );
+                        exit(0);
+                    }
+                    Ok(Fork::Child) => {
+                        debug!("grandson process continue");
+                        let err = exec::Command::new(command).args(args.as_ref()).exec();
+                        error!("fork-exec program err: {}", err);
+                        Some(0)
+                    }
+                    Err(ret) => {
+                        error!("in child process: fork failed with ret: {}", ret);
+                        None
+                    }
+                }
             }
-            Some(0)
-        }
+            Err(err) => {
+                error!("in child process: setsid err: {}", err);
+                None
+            }
+        },
         Err(ret) => {
             error!("fork failed with ret: {}", ret);
             None
