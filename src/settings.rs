@@ -20,6 +20,7 @@ pub struct Proxy {
     pub timeout_allocations: u64,
     pub timeout_pin_ls: u64,
     pub worker: usize,
+    pub wait_alive_retry: i32,
 }
 
 #[derive(Debug, Deserialize)]

@@ -10,8 +10,7 @@ pub enum SyncStatus {
 pub enum GcStatus {
     ClusterStopped,
     IpfsStopped,
-    ClusterStateExported,
-    IpfsPinLsFinish,
+    StateExported,
     GcFinish,
     IpfsStarted,
     Syncing,

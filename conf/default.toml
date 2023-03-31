@@ -14,6 +14,7 @@ timeout_pin=300
 timeout_allocations=600
 timeout_pin_ls=300
 worker=8
+wait_alive_retry=6
 
 [db]
 path="db"
