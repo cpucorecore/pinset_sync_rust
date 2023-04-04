@@ -3,6 +3,7 @@ pub mod cmd_common;
 pub mod cmd_executor;
 pub mod cmd_ipfs;
 pub mod cmd_ipfs_cluster;
+pub mod consul_util;
 pub mod db;
 pub mod http_client;
 pub mod ipfs_cluster_proxy;
