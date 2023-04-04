@@ -230,108 +230,108 @@ pub async fn gc(lock: Data<Mutex<i32>>) -> impl Responder {
         after_gc: Default::default(),
     };
 
-    loop {
-        if let false = ipfs_proxy::alive().await {
-            result.err_msg = "ipfs is not running".to_string();
-            error!("{}", &result.err_msg);
-            break;
-        }
+    match lock.try_lock() {
+        Ok(mut tx_id) => {
+            info!("gc try_lock success, tx_id: {}", tx_id);
+            loop {
+                if let false = ipfs_proxy::alive().await {
+                    result.err_msg = "ipfs is not running".to_string();
+                    error!("{}", &result.err_msg);
+                    break;
+                }
 
-        if let false = ipfs_cluster_proxy::alive().await {
-            result.err_msg = "ipfs-cluster-service is not running".to_string();
-            error!("{}", &result.err_msg);
-            break;
-        }
+                if let false = ipfs_cluster_proxy::alive().await {
+                    result.err_msg = "ipfs-cluster-service is not running".to_string();
+                    error!("{}", &result.err_msg);
+                    break;
+                }
 
-        match lock.try_lock() {
-            Err(err) => {
-                result.err_msg = format!("gc try lock err: {}", err);
-                error!("{}", &result.err_msg);
+                result.before_gc = get_space_info().await;
+
+                debug!("gc stop_cluster");
+                if let None = cmd_ipfs_cluster::stop_cluster() {
+                    result.err_msg = "stop_cluster failed".to_string();
+                    error!("{}", &result.err_msg);
+                    break;
+                }
+                info!("gc stop_cluster success");
+                db::set_state_status(Status::Gc(GcStatus::ClusterStopped));
+
+                debug!("gc stop_ipfs");
+                if let None = cmd_ipfs::stop_ipfs() {
+                    result.err_msg = "stop_ipfs failed".to_string();
+                    error!("{}", &result.err_msg);
+                    break;
+                }
+                info!("gc stop_ipfs success");
+                db::set_state_status(Status::Gc(GcStatus::IpfsStopped));
+
+                let review: SyncReview;
+                if let (Some(cluster_pinset), Some(ipfs_pinset)) =
+                    (cmd_ipfs_cluster::export_cluster_state(), cmd_ipfs::pin_ls())
+                {
+                    review = cross_pinset(cluster_pinset, ipfs_pinset)
+                } else {
+                    result.err_msg = "export_cluster_state or pin_ls failed".to_string();
+                    error!("{}", &result.err_msg);
+                    break;
+                }
+                info!("export_cluster_state and pin_ls success");
+                db::set_state_status(Status::Gc(GcStatus::StateExported));
+
+                debug!("ipfs gc");
+                if let None = cmd_ipfs::gc() {
+                    result.err_msg = "ipfs gc failed".to_string();
+                    error!("{}", &result.err_msg);
+                    break;
+                }
+                info!("ipfs gc success");
+                db::set_state_status(Status::Gc(GcStatus::GcFinish));
+
+                if let None = cmd_ipfs::start_ipfs() {
+                    result.err_msg = "ipfs start failed".to_string();
+                    error!("{}", &result.err_msg);
+                    break;
+                }
+                info!("ipfs start success");
+                db::set_state_status(Status::Gc(GcStatus::IpfsStarted));
+
+                if false == ipfs_proxy::wait_alive(S.proxy.wait_alive_retry).await {
+                    error!("ipfs api not alive, to check ipfs is started");
+                }
+
+                db::set_state_status(Status::Gc(GcStatus::Syncing));
+                do_sync(review).await;
+                info!("do_sync finish");
+
+                if let None = cmd_ipfs_cluster::start_cluster() {
+                    result.err_msg = "start_cluster failed".to_string();
+                    error!("{}", &result.err_msg);
+                    break;
+                }
+
+                if false == ipfs_cluster_proxy::wait_alive(S.proxy.wait_alive_retry).await {
+                    error!("ipfs-cluster-service api not alive, to check ipfs-cluster-service is started");
+                }
+
+                db::set_state_status(Status::Gc(GcStatus::ClusterStarted));
+
+                result.after_gc = get_space_info().await;
+
                 break;
             }
-            Ok(mut tx_id) => *tx_id += 1,
-        };
-        info!("gc try_lock success");
 
-        result.before_gc = get_space_info().await;
+            _start_ipfs().await;
+            _start_ipfs_cluster().await;
 
-        debug!("gc stop_cluster");
-        if let None = cmd_ipfs_cluster::stop_cluster() {
-            result.err_msg = "stop_cluster failed".to_string();
+            db::set_state_status(Status::Idle);
+            *tx_id += 1;
+        }
+        Err(err) => {
+            result.err_msg = format!("gc try lock err: {}", err);
             error!("{}", &result.err_msg);
-            break;
         }
-        info!("gc stop_cluster success");
-        db::set_state_status(Status::Gc(GcStatus::ClusterStopped));
-
-        debug!("gc stop_ipfs");
-        if let None = cmd_ipfs::stop_ipfs() {
-            result.err_msg = "stop_ipfs failed".to_string();
-            error!("{}", &result.err_msg);
-            break;
-        }
-        info!("gc stop_ipfs success");
-        db::set_state_status(Status::Gc(GcStatus::IpfsStopped));
-
-        let review: SyncReview;
-        if let (Some(cluster_pinset), Some(ipfs_pinset)) =
-            (cmd_ipfs_cluster::export_cluster_state(), cmd_ipfs::pin_ls())
-        {
-            review = cross_pinset(cluster_pinset, ipfs_pinset)
-        } else {
-            result.err_msg = "export_cluster_state or pin_ls failed".to_string();
-            error!("{}", &result.err_msg);
-            break;
-        }
-        info!("export_cluster_state and pin_ls success");
-        db::set_state_status(Status::Gc(GcStatus::StateExported));
-
-        debug!("ipfs gc");
-        if let None = cmd_ipfs::gc() {
-            result.err_msg = "ipfs gc failed".to_string();
-            error!("{}", &result.err_msg);
-            break;
-        }
-        info!("ipfs gc success");
-        db::set_state_status(Status::Gc(GcStatus::GcFinish));
-
-        if let None = cmd_ipfs::start_ipfs() {
-            result.err_msg = "ipfs start failed".to_string();
-            error!("{}", &result.err_msg);
-            break;
-        }
-        info!("ipfs start success");
-        db::set_state_status(Status::Gc(GcStatus::IpfsStarted));
-
-        if false == ipfs_proxy::wait_alive(S.proxy.wait_alive_retry).await {
-            error!("ipfs api not alive, to check ipfs is started");
-        }
-
-        db::set_state_status(Status::Gc(GcStatus::Syncing));
-        do_sync(review).await;
-        info!("do_sync finish");
-
-        if let None = cmd_ipfs_cluster::start_cluster() {
-            result.err_msg = "start_cluster failed".to_string();
-            error!("{}", &result.err_msg);
-            break;
-        }
-
-        if false == ipfs_cluster_proxy::wait_alive(S.proxy.wait_alive_retry).await {
-            error!("ipfs-cluster-service api not alive, to check ipfs-cluster-service is started");
-        }
-
-        db::set_state_status(Status::Gc(GcStatus::ClusterStarted));
-
-        result.after_gc = get_space_info().await;
-
-        break;
     }
-
-    _start_ipfs().await;
-    _start_ipfs_cluster().await;
-
-    db::set_state_status(Status::Idle);
 
     Json(result)
 }
