@@ -20,6 +20,7 @@ tokio = { version = "1.26.0", features = ["full"] }
 futures = "0.3.21"
 actix-web = "4.3.1"
 rayon = "1.7.0"
-consul = "0.4.2"
+consulrs = "0.1.0"
 exec = "0.3.1"
 signal-hook = "0.3.14"
+get_if_addrs = "0.5.0"

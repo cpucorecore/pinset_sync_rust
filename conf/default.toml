@@ -16,6 +16,10 @@ timeout_pin_ls=300
 worker=8
 wait_alive_retry=6
 
+[consul]
+host="127.0.0.1"
+port=8500
+
 [db]
 path="db"
 

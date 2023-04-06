@@ -24,6 +24,12 @@ pub struct Proxy {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct Consul {
+    pub host: String,
+    pub port: u16,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Db {
     pub path: String,
 }
@@ -33,6 +39,7 @@ pub struct Settings {
     pub debug: bool,
     pub api: Api,
     pub proxy: Proxy,
+    pub consul: Consul,
     pub db: Db,
 }
 

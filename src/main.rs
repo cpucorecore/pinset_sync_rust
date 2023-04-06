@@ -1,9 +1,11 @@
 extern crate core;
 
 use actix_web::{web, App, HttpServer};
+use log::info;
 use pinset_sync_rust::api::{
     gc, get_state, space_info, start_ipfs, start_ipfs_cluster, sync, sync_review,
 };
+use pinset_sync_rust::consul_util::register_cluster;
 use pinset_sync_rust::db;
 use pinset_sync_rust::ipfs_cluster_proxy as cluster_api;
 use pinset_sync_rust::settings::S;
@@ -52,7 +54,15 @@ async fn setup() {
     log4rs::init_file("conf/log.yml", Default::default()).unwrap();
     if let None = db::get_cluster_id() {
         if let Some(id) = cluster_api::id().await {
-            db::save_cluster_id(id.id)
+            db::save_cluster_id(id.id);
+            match register_cluster().await {
+                Some(_) => {
+                    info!("setup: register cluster to consul success");
+                }
+                None => {
+                    panic!("setup: register cluster failed");
+                }
+            }
         } else {
             panic!("setup: call api(cluster id) failed"); // TODO: not panic for deploy ipfs?
         }
