@@ -40,6 +40,10 @@ pub async fn do_get(url: &str, timeout: u64) -> Option<String> {
 
     match CLI
         .get(url)
+        .basic_auth(
+            &S.proxy.ipfs_cluster_user,
+            Some(&S.proxy.ipfs_cluster_password),
+        )
         .timeout(Duration::from_secs(timeout))
         .send()
         .await

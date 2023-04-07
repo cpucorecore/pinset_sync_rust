@@ -58,34 +58,6 @@ async fn register_service(
     }
 }
 
-async fn deregister_service(id: &str) -> Option<String> {
-    debug!("ip{}", &CLI.settings.address);
-    match service::deregister(&*CLI, id, None).await {
-        Ok(_) => {
-            info!("Service deregistered successfully!");
-            Some(String::from("ok"))
-        }
-        Err(err) => {
-            error!("Failed to deregister service: {}", err);
-            None
-        }
-    }
-}
-
-async fn list_services() -> Option<String> {
-    debug!("ip{}", &CLI.settings.address);
-    match service::list(&*CLI, None).await {
-        Ok(services) => {
-            info!("Service: {:?}", services);
-            Some(String::from("ok"))
-        }
-        Err(err) => {
-            error!("Failed to list services: {}", err);
-            None
-        }
-    }
-}
-
 pub async fn register_cluster() -> Option<String> {
     let service_address = if let Some(ip) = get_local_ip() {
         ip
@@ -100,24 +72,4 @@ pub async fn register_cluster() -> Option<String> {
         String::from("/id"),
     )
     .await
-}
-
-// test register_cluster()
-#[tokio::test]
-async fn test_register_cluster() {
-    log4rs::init_file("conf/log.yml", Default::default()).unwrap();
-    register_cluster().await;
-}
-
-// test deregister_service()
-#[tokio::test]
-async fn test_derigister_service() {
-    deregister_service("cluster").await;
-}
-
-// test list_services()
-#[tokio::test]
-async fn test_list_services() {
-    log4rs::init_file("conf/log.yml", Default::default()).unwrap();
-    list_services().await;
 }

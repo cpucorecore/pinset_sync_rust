@@ -8,9 +8,10 @@ use std::str::FromStr;
 use tokio::time::{sleep, Duration};
 
 lazy_static! {
-    static ref URL_ID: String = format!("http://{}:{}/id", S.proxy.host, S.proxy.ipfs_cluster_port);
+    static ref URL_ID: String =
+        format!("https://{}:{}/id", S.proxy.host, S.proxy.ipfs_cluster_port);
     static ref URL_ALLOCATIONS: String = format!(
-        "http://{}:{}/allocations?filter=all",
+        "https://{}:{}/allocations?filter=all",
         S.proxy.host, S.proxy.ipfs_cluster_port
     );
 }
